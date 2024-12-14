@@ -11,8 +11,6 @@ from finance_buddy import capital_one
 from finance_buddy import utils
 
 # Initialize
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG)
 report_filename = "/tmp/monthly-budget-report.json"
 log_filename = "/tmp/monthly-budget.log"
 
@@ -34,7 +32,13 @@ def process_args():
 
 
 def main():
+    """Entry point for the application."""
     args = process_args()
+    log_level = logging.DEBUG if args.debug else logging.INFO
+
+    # Initialize logger
+    logger = utils.initialize_logger(log_level=log_level, log_filename=log_filename)
+
     # Check the file extension
     transaction_data = {}
     data = None
@@ -50,6 +54,9 @@ def main():
         else:
             logger.error("Unsupported file type. Please provide a CSV or PDF file.")
         transaction_data["capital_one"] = data
+    else:
+        logger.error("No file provided. Please provide file(s) to analyze")
+        exit(1)
 
     # Print data
     if args.print:
@@ -81,17 +88,4 @@ def main():
 
 
 if __name__ == "__main__":
-    args = process_args()
-    if args.debug:
-        log_level = logging.DEBUG
-    else:
-        log_level = logging.INFO
-
-    # Init logger
-    logger = utils.initialize_logger(log_level=log_level, log_filename=log_filename)
-    logger.error("TEST")
-
     main()
-
-    print(f"Log: {log_filename}")
-    print(f"Transactions report: {report_filename}")
