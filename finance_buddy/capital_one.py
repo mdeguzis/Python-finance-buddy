@@ -1,8 +1,12 @@
 from decimal import Decimal
 import re
 
+import logging
 import pandas as pd
 import pdfplumber
+
+# Initialize logging
+logger = logging.getLogger(__name__)
 
 
 def analyze_capitalone_csv(file_path):
@@ -17,7 +21,6 @@ def analyze_capitalone_csv(file_path):
         print(f"Error reading the CSV file: {e}")
 
 
-# TODO - Maybe make this work for any pdf and "oursource" certain things to other methods
 def analyze_capitalone_pdf(file_path, accumulated_data=None):
     parsed_data = accumulated_data or {}
 
@@ -113,7 +116,7 @@ def parse_capitalone_transactions_text(pdf_text, data, page_num):
 
         # Get current person we are handling
         if name_match:
-            current_name = name_match.group(-1)
+            current_name = name_match.group(1)
             current_account = name_match.group(0)
             # Set name in the queue so we have it handy
             data["current_queue"] = current_name

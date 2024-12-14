@@ -4,11 +4,16 @@ import argparse
 import json
 import logging
 
-from decimal import Decimal
 from pathlib import Path
 from enum import Enum
 
 from finance_buddy import capital_one
+from finance_buddy import utils
+
+# Initialize
+logger = logging.getLogger(__name__)
+report_filename = "/tmp/monthly-budget-report.json"
+log_filename = "/tmp/monthly-budget.log"
 
 
 def process_args():
@@ -16,7 +21,6 @@ def process_args():
     parser.add_argument(
         "--capital-one",
         "-c",
-        required=True,
         help="Path to the Capital One statement (CSV or PDF).",
     )
     parser.add_argument(
@@ -28,7 +32,9 @@ def process_args():
     return parser.parse_args()
 
 
-def main(args, report_filename):
+def main():
+    logger.info("Starting main")
+    args = process_args()
     # Check the file extension
     transaction_data = {}
     data = None
@@ -47,36 +53,35 @@ def main(args, report_filename):
 
     # Print data
     if args.print:
-        logger.info(json.dumps(transaction_data, indent=4, default=decimal_default))
+        logger.info(
+            json.dumps(transaction_data, indent=4, default=utils.decimal_default)
+        )
 
-    # Add high level info for budgeting
-    transaction_data["budget"] = {}
-    transaction_data["budget"]["breakdown"] = {}
+    ## Add high level info for budgeting
+    # transaction_data["budget"] = {}
+    # transaction_data["budget"]["breakdown"] = {}
 
-    # Capital one budget information
-    transaction_data["budget"]["breakdown"]["capital_one"] = {}
-    transaction_data["budget"]["breakdown"]["capital_one"]
-    for user, value in transaction_data["capital_one"].items():
-        if value:
-            total_expenses = value["transactions_total_amount"]
-            transaction_data["budget"]["breakdown"]["capital_one"][user] = {}
-            transaction_data["budget"]["breakdown"]["capital_one"][user][
-                "expenses"
-            ] = total_expenses
-    exit
+    ## Capital one budget information
+    # transaction_data["budget"]["breakdown"]["capital_one"] = {}
+    # transaction_data["budget"]["breakdown"]["capital_one"]
+    # for user, value in transaction_data["capital_one"].items():
+    #    if value:
+    #        total_expenses = value["transactions_total_amount"]
+    #        transaction_data["budget"]["breakdown"]["capital_one"][user] = {}
+    #        transaction_data["budget"]["breakdown"]["capital_one"][user][
+    #            "expenses"
+    #        ] = total_expenses
 
     # Sort main keys so "budget" key is on top
     sorted_data = {key: transaction_data[key] for key in sorted(transaction_data)}
 
     # Write report
     with open(report_filename, "w") as outfile:
-        json.dump(sorted_data, outfile, indent=4, default=decimal_default)
+        json.dump(sorted_data, outfile, indent=4, default=utils.decimal_default)
 
 
 if __name__ == "__main__":
     args = process_args()
-    report_filename = "/tmp/monthly-budget-report.json"
-    logger = logging.getLogger("monthly-budget")
     if args.debug:
         logger.setLevel(logging.DEBUG)
     else:
@@ -94,13 +99,12 @@ if __name__ == "__main__":
     logger.addHandler(console_handler)
 
     # File handler
-    log_filename = "/tmp/monthly-budget.log"
     file_handler = logging.FileHandler(log_filename, mode="w")
     file_handler.setFormatter(formatter)
     # Add file handler to logger
     logger.addHandler(file_handler)
 
-    main(args, report_filename)
+    main()
 
     print(f"Log: {log_filename}")
     print(f"Transactions report: {report_filename}")

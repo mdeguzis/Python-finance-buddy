@@ -6,6 +6,7 @@ name = "pypi"
 [packages]
 pandas = "*"
 pdfplumber = "*"
+python-finance-buddy = {file = ".", editable = true}
 
 [dev-packages]
 
