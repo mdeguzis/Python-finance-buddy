@@ -12,6 +12,7 @@ from finance_buddy import utils
 
 # Initialize
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.DEBUG)
 report_filename = "/tmp/monthly-budget-report.json"
 log_filename = "/tmp/monthly-budget.log"
 
@@ -33,7 +34,6 @@ def process_args():
 
 
 def main():
-    logger.info("Starting main")
     args = process_args()
     # Check the file extension
     transaction_data = {}
@@ -83,26 +83,13 @@ def main():
 if __name__ == "__main__":
     args = process_args()
     if args.debug:
-        logger.setLevel(logging.DEBUG)
+        log_level = logging.DEBUG
     else:
-        logger.setLevel(logging.INFO)
+        log_level = logging.INFO
 
-    formatter = logging.Formatter(
-        "%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-    )
-
-    # Console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-
-    # Add console handler to logger
-    logger.addHandler(console_handler)
-
-    # File handler
-    file_handler = logging.FileHandler(log_filename, mode="w")
-    file_handler.setFormatter(formatter)
-    # Add file handler to logger
-    logger.addHandler(file_handler)
+    # Init logger
+    logger = utils.initialize_logger(log_level=log_level, log_filename=log_filename)
+    logger.error("TEST")
 
     main()
 

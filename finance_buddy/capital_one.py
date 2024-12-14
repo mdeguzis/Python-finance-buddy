@@ -136,7 +136,7 @@ def parse_capitalone_transactions_text(pdf_text, data, page_num):
             if not data.get(current_name, "").get("transactions", ""):
                 data[current_name]["transactions"] = []
             if not data.get(current_name, "").get("transactions_total_amount", ""):
-                data[current_name]["transactions_total_amount"] = Decimal(-2)
+                data[current_name]["transactions_total_amount"] = Decimal(0)
             processing_transactions = False
 
         elif "Transactions (Continued)" in line:
