@@ -84,14 +84,21 @@ def decimal_default(obj):
 
 def group_transactions_by_category(transaction_data):
     category_groups = {}
-
+    
     def amount_to_float(amount_str):
         return float(str(amount_str).replace('$', '').replace(',', ''))
     
+    def format_account(bank, account_info):
+        # Extract account number from the account info string
+        account_num = account_info.split('#')[1].split(':')[0].strip()
+        return f"{bank.upper()} #{account_num}"
+    
+    # Process all transactions across all banks and users
     for bank, bank_data in transaction_data.items():
         if bank != 'budget':
             for user, user_data in bank_data.items():
                 if user_data and 'transactions' in user_data:
+                    account = format_account(bank, user_data['account'])
                     for transaction in user_data['transactions']:
                         category = transaction.get('transaction_category', 'uncategorized')
                         description = transaction['description']
@@ -99,11 +106,10 @@ def group_transactions_by_category(transaction_data):
                         
                         if category not in category_groups:
                             category_groups[category] = []
-                            
-                        # Format amount to be left-aligned in 10 spaces
-                        formatted_amount = f"{amount:<14}"
-                        # Combine amount and description with fixed spacing
-                        transaction_str = f"{formatted_amount} {description}"
+                        
+                        # Format with amount, description, and account
+                        formatted_amount = f"{amount:<10}"
+                        transaction_str = f"{formatted_amount} {description:<40} {account}"
                         category_groups[category].append(transaction_str)
     
     # Sort transactions within each category by amount
