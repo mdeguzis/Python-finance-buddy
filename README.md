@@ -18,6 +18,11 @@ Run the following to train the data
 pipenv run python data/train-data.py
 ```
 
+When you see low confidence matches, update known categories in
+* `data/training-categories.json`
+* `finance_buddy/classification.py` > `ExpenseCategory`
+* Avoid adding tranining data that would be considered personal
+
 This dataset is what is used to guess the categories for the transactions when the program is ran. 
 In the future, other resources may be leveraged:
 
