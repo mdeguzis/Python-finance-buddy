@@ -18,10 +18,44 @@ Run the following to train the data
 pipenv run python data/train-data.py
 ```
 
+Examples:
+
+```
+$ pipenv run finance-buddy --capital-one ~/Downloads/test.pdf 
+2024-12-15 04:02:46,250 - INFO - Analyzing file: /tmp/test.pdf
+2024-12-15 04:02:46,250 - INFO - Detected file type: PDF
+2024-12-15 04:02:46,251 - INFO - Extracting data from Capital One PDF...
+2024-12-15 04:02:46,286 - INFO - Processing page 1...
+2024-12-15 04:02:46,940 - INFO - Processing transactions for 'YIN RONG ALVINA TEO' (Account #YIN RONG ALVINA TEO #5611: Transactions)
+2024-12-15 04:02:46,942 - INFO - Predicted food for description 'TST*FOODPLACE"
+```
+
 When you see low confidence matches, update known categories in
 * `data/training-categories.json`
 * `finance_buddy/classification.py` > `ExpenseCategory`
 * Avoid adding tranining data that would be considered personal
+
+```
+pipenv run python data/train-data.py
+
+================================================================================
+Making predictions on sample data...
+================================================================================
+Attempting to predict category for: CHIPOTLE USAPAVAFL
+Predicted category: food (confidence: 0.62)
+
+================================================================================
+Making predictions on full data...
+================================================================================
+Attempting to predict category for: GRAMMARLY CO
+Predicted category: software (confidence: 0.37)
+
+================================================================================
+Low confidence / unknowns:
+================================================================================
+['SPOTHERO 231234232134', '0.38']
+['SOME RANDOM BAKERY AND', '0.38']
+```
 
 This dataset is what is used to guess the categories for the transactions when the program is ran. 
 In the future, other resources may be leveraged:
