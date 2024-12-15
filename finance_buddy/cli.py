@@ -38,10 +38,12 @@ def main():
     """Entry point for the application."""
     args = process_args()
     log_level = logging.DEBUG if args.debug else logging.INFO
-    locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
+    locale.setlocale(locale.LC_ALL, "en_US.UTF-8")
 
     # Initialize logger
-    logger = utils.initialize_logger(log_level=log_level, log_filename=log_filename, scope="cli")
+    logger = utils.initialize_logger(
+        log_level=log_level, log_filename=log_filename, scope="cli"
+    )
 
     # Check the file extension
     transaction_data = {}
@@ -103,11 +105,17 @@ def main():
             if user_data:
                 for transaction in user_data["transactions"]:
                     desc = transaction["description"]
-                    if desc not in [d.get("transaction", d.get("description")) for d in descriptions]:
-                        descriptions.append({
-                            "transaction": desc,
-                            "category": existing_categories.get(desc, "unknown")  # Use existing category if available
-                        })
+                    if desc not in [
+                        d.get("transaction", d.get("description")) for d in descriptions
+                    ]:
+                        descriptions.append(
+                            {
+                                "transaction": desc,
+                                "category": existing_categories.get(
+                                    desc, "unknown"
+                                ),  # Use existing category if available
+                            }
+                        )
 
     classification.save_descriptions(descriptions_path, descriptions)
 
@@ -116,36 +124,44 @@ def main():
     budget_total_expenses = 0
     try:
         transaction_data["budget"]["breakdown"]["by-bank"] = {}
+        transaction_data["budget"]["breakdown"]["expenses_breakdown"] = {}
         for bank in banks:
             transaction_data["budget"]["breakdown"]["by-bank"][bank] = {}
             if transaction_data.get(bank):
-                transactions_sorted_breakdown = utils.sort_transactions_by_amount(transaction_data)
+                transactions_sorted_breakdown = utils.sort_transactions_by_amount(
+                    transaction_data
+                )
                 for user, value in transaction_data[bank].items():
                     if value:
                         total_expenses = value["transactions_total_amount"]
                         budget_total_expenses += total_expenses
-                        transaction_data["budget"]["breakdown"]["by-bank"][bank][user] = {}
+                        transaction_data["budget"]["breakdown"]["by-bank"][bank][
+                            user
+                        ] = {}
                         transaction_data["budget"]["breakdown"]["by-bank"][bank][user][
-                        "expenses"
-                    ] = locale.currency(total_expenses, grouping=True)
+                            "expenses"
+                        ] = locale.currency(total_expenses, grouping=True)
                         "expenses"
 
                         # Create a subset of data for just the current user
-                        user_transactions = {
-                            bank: {
-                                user: value
-                            }
-                        }
+                        user_transactions = {bank: {user: value}}
                         # Pass only the current user's transactions
-                        transaction_data["budget"]["breakdown"]["expenses_breakdown"] = {}
-                        transaction_data["budget"]["breakdown"]["expenses_breakdown"][user] = []
-                        transaction_data["budget"]["breakdown"]["expenses_breakdown"][user] = utils.group_transactions_by_category(user_transactions)
+                        transaction_data["budget"]["breakdown"]["expenses_breakdown"][
+                            user
+                        ] = []
+                        transaction_data["budget"]["breakdown"]["expenses_breakdown"][
+                            user
+                        ] = utils.group_transactions_by_category(user_transactions)
 
         # High level non-user
         # Format budget_total_expenses as currency
-        transaction_data["budget"]["breakdown"]["total_expenses"] = locale.currency(budget_total_expenses, grouping=True)
+        transaction_data["budget"]["breakdown"]["total_expenses"] = locale.currency(
+            budget_total_expenses, grouping=True
+        )
     except TypeError as e:
-        transaction_data["budget"]["breakdown"]["total_expenses"] = locale.currency(budget_total_expenses, grouping=True)
+        transaction_data["budget"]["breakdown"]["total_expenses"] = locale.currency(
+            budget_total_expenses, grouping=True
+        )
         raise Exception(f"Error processing Capital One data: {e}")
 
     # Sort main keys so "budget" key is on top
@@ -158,6 +174,7 @@ def main():
     logger.info(f"Log: {log_filename}")
     logger.info(f"Transactions report: {report_filename}")
     logger.info("Descriptions written to %s", descriptions_path)
+
 
 if __name__ == "__main__":
     main()
