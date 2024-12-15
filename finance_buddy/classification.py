@@ -2,8 +2,11 @@ import logging
 import pickle
 import json
 import os
+import re
 from rapidfuzz import fuzz
 from enum import Enum
+
+from fuzzywuzzy import fuzz
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.naive_bayes import MultinomialNB
 
@@ -136,27 +139,44 @@ def save_descriptions(descriptions_path, descriptions):
 def generate_categories():
     return [category.value for category in ExpenseCategory]
 
+def clean_text(text):
+    """Clean and standardize text for better matching"""
+    # Convert to uppercase and remove special characters
+    text = re.sub(r'[^\w\s]', ' ', text.upper())
+    # Remove extra whitespace
+    text = ' '.join(text.split())
+    return text
+
 def load_training_data():
-    """
-    Load known categorizations for training the model
-    """
+    """Load training data with variations"""
     training_descriptions = []
     training_categories = []
     
-    try:
-        with open(os.path.join(DATA_FOLDER, "training-categories.json"), "r", encoding="utf-8") as f:
-            training_data = json.load(f)
-            
-            for description, category in training_data.items():
-                training_descriptions.append(description)
-                training_categories.append(category)
-                
-        logger.info(f"Loaded {len(training_descriptions)} training examples")
-        return training_descriptions, training_categories
+    with open(os.path.join(DATA_FOLDER, "training-categories.json"), "r") as f:
+        training_data = json.load(f)
         
-    except FileNotFoundError:
-        logger.warning("No training data file found")
-        return [], []
+    # Add variations for each merchant
+    for merchant, category in training_data.items():
+        # Add original
+        training_descriptions.append(merchant)
+        training_categories.append(category)
+        
+        # Add with common prefixes/suffixes
+        variations = [
+            f"{merchant} #",
+            f"{merchant} STORE",
+            f"SQ *{merchant}",  # Square payments
+            f"{merchant}*",
+            f"{merchant} LLC",
+            f"{merchant} INC",
+        ]
+        
+        for variation in variations:
+            training_descriptions.append(variation)
+            training_categories.append(category)
+    
+    return training_descriptions, training_categories
+
 def get_model():
     """
     Load the trained model and vectorizer from disk
@@ -178,40 +198,53 @@ def get_model():
 
 def predict_category(description, vectorizer, model):
     """
-    Predict category for a given description using fuzzy matching and the trained model
+    Predict category with improved matching
     """
     if vectorizer is None or model is None:
-        return ExpenseCategory.UNKNOWN.value, 0.0
+        return "unknown", 0.0
 
-    # Transform new description
-    X_new = vectorizer.transform([description])
-
-    # Get prediction and probabilities
+    # Clean the input description
+    cleaned_description = clean_text(description)
+    
+    # Load training data for fuzzy matching
+    training_descriptions, _ = load_training_data()
+    
+    # Try exact prediction first
+    X_new = vectorizer.transform([cleaned_description])
     predicted_category = model.predict(X_new)[0]
     probabilities = model.predict_proba(X_new)[0]
     confidence = max(probabilities)
 
-    # If confidence is too low, try fuzzy matching with training data
+    # If confidence is low, try fuzzy matching
     if confidence < 0.3:
-        training_descriptions, _ = load_training_data()
         best_match = None
         best_ratio = 0
         
         for train_desc in training_descriptions:
-            ratio = fuzz.ratio(description.lower(), train_desc.lower())
+            # Try different fuzzy matching techniques
+            ratio1 = fuzz.ratio(cleaned_description, clean_text(train_desc))
+            ratio2 = fuzz.partial_ratio(cleaned_description, clean_text(train_desc))
+            ratio3 = fuzz.token_sort_ratio(cleaned_description, clean_text(train_desc))
+            
+            # Use the best matching score
+            ratio = max(ratio1, ratio2, ratio3)
+            
             if ratio > best_ratio:
                 best_ratio = ratio
                 best_match = train_desc
-        
-        # If we found a good fuzzy match, use its prediction
-        if best_ratio > 80:  # You can adjust this threshold
+
+        # If we found a good fuzzy match
+        if best_ratio > 70:  # Adjusted threshold
             X_match = vectorizer.transform([best_match])
             predicted_category = model.predict(X_match)[0]
             confidence = best_ratio / 100.0
+            
+            logger.debug(f"Fuzzy matched '{description}' to '{best_match}' with confidence {confidence}")
 
-    # If still low confidence, return UNKNOWN
-    if confidence < 0.3:
-        return ExpenseCategory.UNKNOWN.value, confidence
+    # For debugging
+    logger.debug(f"Description: {description}")
+    logger.debug(f"Cleaned: {cleaned_description}")
+    logger.debug(f"Predicted: {predicted_category} (confidence: {confidence})")
 
     return predicted_category, confidence
 

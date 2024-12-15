@@ -9,6 +9,7 @@ pdfplumber = "*"
 python-finance-buddy = {file = ".", editable = true}
 rapidfuzz = "*"
 scikit-learn = "*"
+fuzzywuzzy = "*"
 
 [dev-packages]
 

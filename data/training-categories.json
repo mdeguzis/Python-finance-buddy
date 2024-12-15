@@ -12,5 +12,8 @@
     "DOORDASH": "food",
     "GRUBHUB": "food",
     "CRYSTAL PLACE": "rent",
-    "CAFE": "food"
+    "CAFE": "food",
+    "CHIPOTLE": "food",
+    "SQ *CAFE": "food",
+    "PRT CRYSTAL": "rent"
 }
