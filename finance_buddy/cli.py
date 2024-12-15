@@ -115,16 +115,17 @@ def main():
     banks = ["capital_one", "chase"]
     budget_total_expenses = 0
     try:
+        transaction_data["budget"]["breakdown"]["by-bank"] = {}
         for bank in banks:
+            transaction_data["budget"]["breakdown"]["by-bank"][bank] = {}
             if transaction_data.get(bank):
-                transaction_data["budget"]["breakdown"][bank] = {}
                 transactions_sorted_breakdown = utils.sort_transactions_by_amount(transaction_data)
                 for user, value in transaction_data[bank].items():
                     if value:
                         total_expenses = value["transactions_total_amount"]
                         budget_total_expenses += total_expenses
-                        transaction_data["budget"]["breakdown"][bank][user] = {}
-                        transaction_data["budget"]["breakdown"][bank][user][
+                        transaction_data["budget"]["breakdown"]["by-bank"][bank][user] = {}
+                        transaction_data["budget"]["breakdown"]["by-bank"][bank][user][
                         "expenses"
                     ] = locale.currency(total_expenses, grouping=True)
                         "expenses"
@@ -136,7 +137,9 @@ def main():
                             }
                         }
                         # Pass only the current user's transactions
-                        transaction_data["budget"]["breakdown"][bank][user]["expenses_breakdown"] = utils.group_transactions_by_category(user_transactions)
+                        transaction_data["budget"]["breakdown"]["expenses_breakdown"] = {}
+                        transaction_data["budget"]["breakdown"]["expenses_breakdown"][user] = []
+                        transaction_data["budget"]["breakdown"]["expenses_breakdown"][user] = utils.group_transactions_by_category(user_transactions)
 
         # High level non-user
         # Format budget_total_expenses as currency
