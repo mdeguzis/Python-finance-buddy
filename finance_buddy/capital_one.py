@@ -1,12 +1,15 @@
 from decimal import Decimal
 import re
 
+import locale
 import logging
 import pandas as pd
 import pdfplumber
 
 # Get a child logger that inherits from the root logger
 logger = logging.getLogger('cli')
+
+locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
 
 from finance_buddy import classification
 
@@ -97,12 +100,12 @@ def parse_capitalone_transactions_text(pdf_text, data, page_num):
             # Our total
             total_amount_from_data = data[this_user]["transactions_total_amount"]
             logger.debug("Converting our total %s to Decimal", total_amount_from_data)
-            total_amount_processed = Decimal(total_amount_from_data)
+            total_amount_processed = locale.currency(Decimal(total_amount_from_data), grouping=True)
             # Statement total
             statement_final = done_match.group(3).replace("$", "").replace(",", "")
             logger.debug(
                 "Converting statement final total %s, to Decimal", statement_final)
-            statement_final_amount = Decimal(statement_final)
+            statement_final_amount = locale.currency(Decimal(statement_final), grouping=True)
             # Verify
             if total_amount_processed != statement_final_amount:
                 logger.error(
@@ -189,22 +192,22 @@ def parse_capitalone_transactions_text(pdf_text, data, page_num):
                     logger.info("Predicted %s for description '%s'", category, description)
 
                     amount = data_match.group(4).replace("$", "")
+                    amount_decimal = Decimal(amount.replace(",", ""))
                     data[current_name]["transactions"].append(
                         {
                             "transaction_date": transaction_date,
                             "transaction_category": category,
                             "post_date": post_date,
                             "description": description,
-                            "amount": amount,
+                            "amount": locale.currency(amount_decimal, grouping=True),
                         }
                     )
                     # Ensure that all the transactions we collect match up later to
                     # the total amount
                     logger.debug("Converting %s to Decimal", amount)
-                    amount_decimal = Decimal(amount.replace(",", ""))
                     logger.debug("Adding %s to total", amount_decimal)
                     data[current_name]["transactions_total_amount"] += amount_decimal
-                    total = data[current_name]["transactions_total_amount"]
+                    total = locale.currency(data[current_name]["transactions_total_amount"], grouping=True)
                     logger.debug("Total: %s", total)
             except Exception as e:
                 raise Exception(e)

@@ -81,3 +81,61 @@ def decimal_default(obj):
     if isinstance(obj, Decimal):
         return str(obj)
     raise TypeError("Object of type Decimal is not JSON serializable")
+
+def group_transactions_by_category(transaction_data):
+    category_groups = {}
+
+    def amount_to_float(amount_str):
+        return float(str(amount_str).replace('$', '').replace(',', ''))
+    
+    for bank, bank_data in transaction_data.items():
+        if bank != 'budget':
+            for user, user_data in bank_data.items():
+                if user_data and 'transactions' in user_data:
+                    for transaction in user_data['transactions']:
+                        category = transaction.get('transaction_category', 'uncategorized')
+                        description = transaction['description']
+                        amount = transaction['amount']
+                        
+                        if category not in category_groups:
+                            category_groups[category] = []
+                            
+                        # Format amount to be left-aligned in 10 spaces
+                        formatted_amount = f"{amount:<14}"
+                        # Combine amount and description with fixed spacing
+                        transaction_str = f"{formatted_amount} {description}"
+                        category_groups[category].append(transaction_str)
+    
+    # Sort transactions within each category by amount
+    for category in category_groups:
+        category_groups[category] = sorted(
+            category_groups[category],
+            key=lambda x: amount_to_float(x.split()[0]),
+            reverse=True
+        )
+    
+    return category_groups
+
+
+def sort_transactions_by_amount(transaction_data):
+    expense_tuples = []
+    
+    # Navigate through the nested structure
+    for bank, bank_data in transaction_data.items():
+        if bank != 'budget':  # Skip the budget key
+            for user, user_data in bank_data.items():
+                if user_data and 'transactions' in user_data:
+                    for transaction in user_data['transactions']:
+                        expense_tuples.append(
+                            (transaction['description'], 
+                             transaction['amount'])
+                        )
+    
+    # Convert amount strings to float for sorting
+    def amount_to_float(amount_str):
+        return float(str(amount_str).replace('$', '').replace(',', ''))
+    
+    # Sort by amount (highest to lowest)
+    return sorted(expense_tuples, 
+                 key=lambda x: amount_to_float(x[1]), 
+                 reverse=True)
