@@ -28,7 +28,14 @@ $ pipenv run finance-buddy --capital-one ~/Downloads/test.pdf
 2024-12-15 04:02:46,286 - INFO - Processing page 1...
 2024-12-15 04:02:46,940 - INFO - Processing transactions for 'YIN RONG ALVINA TEO' (Account #YIN RONG ALVINA TEO #5611: Transactions)
 2024-12-15 04:02:46,942 - INFO - Predicted food for description 'TST*FOODPLACE"
+2024-12-15 04:02:47,536 - INFO - Log: /tmp/monthly-budget.log
+2024-12-15 04:02:47,537 - INFO - Transactions report: /tmp/monthly-budget-report.json
+2024-12-15 04:02:47,537 - INFO - Descriptions written to /local/home/deguzim/src/Python-finance-buddy/private/descriptions-data.json
 ```
+
+Outputs:
+* `/tmp/monthly-budget.log`: Program log
+* `/tmp/monthly-budget-report.json`: JSON report analysis and budgeting help / info
 
 When you see low confidence matches, update known categories in
 * `data/training-categories.json`
