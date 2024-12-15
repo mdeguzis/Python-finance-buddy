@@ -10,6 +10,7 @@ python-finance-buddy = {file = ".", editable = true}
 rapidfuzz = "*"
 scikit-learn = "*"
 fuzzywuzzy = "*"
+python-levenshtein = "*"
 
 [dev-packages]
 
