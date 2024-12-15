@@ -8,6 +8,7 @@ import pdfplumber
 # Get a child logger that inherits from the root logger
 logger = logging.getLogger('cli')
 
+from finance_buddy import classification
 
 def analyze_capitalone_csv(file_path):
     try:
@@ -180,10 +181,18 @@ def parse_capitalone_transactions_text(pdf_text, data, page_num):
                     transaction_date = data_match.group(1)
                     post_date = data_match.group(2)
                     description = data_match.group(3)
+                    # Attempt to predict category based on training model
+                    vectorizer, model = classification.get_model()
+                    category = classification.categorize_transaction(description, vectorizer, model)
+
+                    # Move to debug
+                    logger.info("Predicted %s for description '%s'", category, description)
+
                     amount = data_match.group(4).replace("$", "")
                     data[current_name]["transactions"].append(
                         {
                             "transaction_date": transaction_date,
+                            "transaction_category": category,
                             "post_date": post_date,
                             "description": description,
                             "amount": amount,

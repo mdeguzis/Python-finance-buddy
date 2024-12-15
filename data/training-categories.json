@@ -1,0 +1,16 @@
+{
+    "WALMART": "groceries",
+    "TARGET": "groceries",
+    "NETFLIX": "entertainment",
+    "APPLE.COM": "entertainment",
+    "SHELL": "transportation",
+    "EXXON": "transportation",
+    "CVS": "healthcare",
+    "WALGREENS": "healthcare",
+    "AMAZON": "shopping",
+    "UBER": "transportation",
+    "DOORDASH": "food",
+    "GRUBHUB": "food",
+    "CRYSTAL PLACE": "rent",
+    "CAFE": "food"
+}

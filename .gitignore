@@ -3,6 +3,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Private
+# Don't commit this data only the models
+private/descriptions-data.json
+
 # C extensions
 *.so
 

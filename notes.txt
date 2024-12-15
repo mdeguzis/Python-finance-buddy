@@ -1,0 +1,13 @@
+# In your cli.py or wherever you process transactions
+def categorize_transaction(description, vectorizer, model):
+    category, confidence = predict_category(description, vectorizer, model)
+    if confidence > 0.3:
+        return category
+    return "unknown"
+
+# When processing transactions
+for transaction in transactions:
+    predicted_category = categorize_transaction(transaction["description"], vectorizer, model)
+    if predicted_category != "unknown":
+        # Update the category in your descriptions.json
+        transaction["category"] = predicted_category

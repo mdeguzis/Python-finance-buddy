@@ -7,6 +7,8 @@ name = "pypi"
 pandas = "*"
 pdfplumber = "*"
 python-finance-buddy = {file = ".", editable = true}
+rapidfuzz = "*"
+scikit-learn = "*"
 
 [dev-packages]
 

@@ -8,6 +8,7 @@ from pathlib import Path
 from enum import Enum
 
 from finance_buddy import capital_one
+from finance_buddy import classification
 from finance_buddy import utils
 
 # Initialize
@@ -68,6 +69,45 @@ def main():
     transaction_data["budget"] = {}
     transaction_data["budget"]["breakdown"] = {}
 
+    # Write the descriptions to the "data" folder
+    # This is to help with categorization
+    # Only write if it doesn't exist
+    descriptions_path = Path("private/descriptions-data.json")
+    descriptions_path = descriptions_path.resolve()
+    descriptions = []
+
+    # Get descriptions by searching all of transaction_data for the "description" key
+    # In cli.py
+    # First, load existing descriptions to preserve categories
+    existing_descriptions = []
+    if descriptions_path.exists():
+        try:
+            with open(descriptions_path, "r", encoding="utf-8") as f:
+                existing_descriptions = json.load(f)
+        except json.JSONDecodeError:
+            logger.warning("Could not load existing descriptions file")
+
+    # Create a dictionary for quick lookup of existing categories
+    existing_categories = {
+        d.get("transaction", d.get("description")): d.get("category")
+        for d in existing_descriptions
+    }
+
+    # Get descriptions by searching all of transaction_data for the "description" key
+    descriptions = []
+    for bank, bank_data in transaction_data.items():
+        for user, user_data in bank_data.items():
+            if user_data:
+                for transaction in user_data["transactions"]:
+                    desc = transaction["description"]
+                    if desc not in [d.get("transaction", d.get("description")) for d in descriptions]:
+                        descriptions.append({
+                            "transaction": desc,
+                            "category": existing_categories.get(desc, "unknown")  # Use existing category if available
+                        })
+
+    classification.save_descriptions(descriptions_path, descriptions)
+
     # Capital one budget information
     try:
         transaction_data["budget"]["breakdown"]["capital_one"] = {}
@@ -88,8 +128,9 @@ def main():
     with open(report_filename, "w") as outfile:
         json.dump(sorted_data, outfile, indent=4, default=utils.decimal_default)
 
-    print(f"Log: {log_filename}")
-    print(f"Transactions report: {report_filename}")
+    logger.info(f"Log: {log_filename}")
+    logger.info(f"Transactions report: {report_filename}")
+    logger.info("Descriptions written to %s", descriptions_path)
 
 if __name__ == "__main__":
     main()
