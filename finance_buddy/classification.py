@@ -23,16 +23,17 @@ MODEL_PATH = os.path.join(PRIVATE_DATA_FOLDER, 'model.pkl')
 
 # Define an Enum for expense categories
 class ExpenseCategory(Enum):
-    RENT = "rent"
     BILLS = "bills"
-    UTILITIES = "utilities"
-    GROCERIES = "groceries"
-    TRANSPORTATION = "transportation"
     ENTERTAINMENT = "entertainment"
+    GROCERIES = "groceries"
     HEALTHCARE = "healthcare"
     MISCELLANEOUS = "miscellaneous"
+    RENT = "rent"
+    SHOPPING = "shopping"
     SOFTWARE = "software"
+    TRANSPORTATION = "transportation"
     UNKNOWN = "unknown"
+    UTILITIES = "utilities"
 
 # Easiest (by expensive, time consuming), would be to use Plaid API
 # Other options:
