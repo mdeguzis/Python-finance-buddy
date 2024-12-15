@@ -20,20 +20,24 @@ DATA_FOLDER = os.path.join(ROOT_DIR, "data")
 PRIVATE_DATA_FOLDER = os.path.join(ROOT_DIR, "private")
 VECTORIZER_PATH = os.path.join(PRIVATE_DATA_FOLDER, "vectorizer.pkl")
 MODEL_PATH = os.path.join(PRIVATE_DATA_FOLDER, "model.pkl")
+LOW_CONDFIDENCE = 0.50
 
 
 # Define an Enum for expense categories
 class ExpenseCategory(Enum):
     BILLS = "bills"
     ENTERTAINMENT = "entertainment"
+    FOOD = "food"
     GROCERIES = "groceries"
     HEALTH = "health"
+    INSURANCE = "insurance"
     MISCELLANEOUS = "miscellaneous"
+    OTHER = "other"
     PERSONAL_CARE = "personal care"
     RENT = "rent"
+    SERVICES = "services"
     SHOPPING = "shopping"
     SOFTWARE = "software"
-    SERVICES = "services"
     SUBSCRIPTIONS = "subscriptions"
     TRANSPORTATION = "transportation"
     UNKNOWN = "unknown"
@@ -172,15 +176,20 @@ def clean_text(text):
 
 
 def load_training_data():
-    """Load training data with variations"""
+    """Load training data with variations, ensuring categories match the ExpenseCategory enum"""
     training_descriptions = []
     training_categories = []
 
     with open(os.path.join(DATA_FOLDER, "training-categories.json"), "r") as f:
         training_data = json.load(f)
 
-    # Add variations for each merchant
+    # Validate and add variations for each merchant
     for merchant, category in training_data.items():
+        # Validate category against ExpenseCategory
+        if category.lower() not in (e.value for e in ExpenseCategory):
+            logger.error(f"Invalid category '{category}' for merchant '{merchant}'!")
+            exit(1)
+
         # Add original
         training_descriptions.append(merchant)
         training_categories.append(category)
@@ -313,3 +322,76 @@ def categorize_transaction(description, vectorizer, model):
     if confidence > 0.3:
         return category
     return "unknown"
+
+
+def train_and_save():
+    """Train and save the model"""
+    print("Training the model...")
+    vectorizer, model = train_classifier()
+
+    if vectorizer and model:
+        print("Saving the model...")
+        save_model(vectorizer, model)
+    else:
+        logger.error("Failed to train model")
+        return
+
+
+def test_predictions():
+    """Load model and test predictions"""
+    # Load the saved model
+    vectorizer, model = get_model()
+
+    if not vectorizer or not model:
+        logger.error("Could not load model. Please train first.")
+        return
+
+    # Test descriptions
+    unknowns = []
+    descriptions = [
+        "CHIPOTLE USAPAVAFL",
+        "PRT CRYSTAL 702-9205600VA",
+        "SQ *CAFE AMAZONSomethingUSA",
+        "GOOGLE *CBS Mobile",
+    ]
+
+    print("=" * 79)
+    print("Making predictions on sample data...")
+    print("=" * 79)
+    for description in descriptions:
+        print(f"\nAttempting to predict category for: {description}")
+        category, confidence = predict_category(description, vectorizer, model)
+        print(f"Predicted category: {category} (confidence: {confidence:.1f})")
+        if category == "unknown" or confidence < LOW_CONDFIDENCE:
+            unknowns.append([description, f"{category}", f"{confidence:.1f}"])
+    print()
+
+    print("=" * 79)
+    print("Making predictions on full data...")
+    print("=" * 79)
+    all_descriptions, categories = load_descriptions()
+    for description in all_descriptions:
+        print(f"\nAttempting to predict category for: {description}")
+        category, confidence = predict_category(description, vectorizer, model)
+        print(f"Predicted category: {category} (confidence: {confidence:.1f})")
+        if category == "unknown" or confidence < LOW_CONDFIDENCE:
+            unknowns.append([description, f"{category}", f"{confidence:.1f}"])
+    print()
+
+    # Report unknowns to fix
+    if unknowns:
+        print("=" * 79)
+        print("Low confidence / unknowns:")
+        print("=" * 79)
+        for unknown in unknowns:
+            print(unknown)
+    print()
+
+
+def main():
+    # Only train and save if you have new training data
+    # Maybe make this and arg
+    train_and_save()
+
+    # Make predictions using saved model
+    test_predictions()

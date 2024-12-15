@@ -26,6 +26,12 @@ def process_args():
         help="Path to the Capital One statement (CSV or PDF).",
     )
     parser.add_argument(
+        "--train", action="store_true", help="Train and save the model."
+    )
+    parser.add_argument(
+        "--test", action="store_true", help="Test predictions using the model."
+    )
+    parser.add_argument(
         "--debug", "-d", action="store_true", help="Enable debug output"
     )
     parser.add_argument(
@@ -44,6 +50,11 @@ def main():
     logger = utils.initialize_logger(
         log_level=log_level, log_filename=log_filename, scope="cli"
     )
+
+    if args.train:
+        classification.train_and_save()
+    if args.test:
+        classification.test_predictions()
 
     # Check the file extension
     transaction_data = {}
