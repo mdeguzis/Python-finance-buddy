@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
 DATA_FOLDER = os.path.join(ROOT_DIR, "data")
 PRIVATE_DATA_FOLDER = os.path.join(ROOT_DIR, "private")
-VECTORIZER_PATH = os.path.join(PRIVATE_DATA_FOLDER, "vectorizer.pkl")
-MODEL_PATH = os.path.join(PRIVATE_DATA_FOLDER, "model.pkl")
+VECTORIZER_PATH = os.path.join(DATA_FOLDER, "vectorizer.pkl")
+MODEL_PATH = os.path.join(DATA_FOLDER, "model.pkl")
 LOW_CONDFIDENCE = 0.50
 
 
