@@ -17,8 +17,9 @@ logger = logging.getLogger(__name__)
 # Get absolute path to project root folder (one level up from current file)
 ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
 DATA_FOLDER = os.path.join(ROOT_DIR, 'data')
-VECTORIZER_PATH = os.path.join(DATA_FOLDER, 'vectorizer.pkl')
-MODEL_PATH = os.path.join(DATA_FOLDER, 'model.pkl')
+PRIVATE_DATA_FOLDER = os.path.join(ROOT_DIR, 'private')
+VECTORIZER_PATH = os.path.join(PRIVATE_DATA_FOLDER, 'vectorizer.pkl')
+MODEL_PATH = os.path.join(PRIVATE_DATA_FOLDER, 'model.pkl')
 
 # Define an Enum for expense categories
 class ExpenseCategory(Enum):
@@ -30,6 +31,7 @@ class ExpenseCategory(Enum):
     ENTERTAINMENT = "entertainment"
     HEALTHCARE = "healthcare"
     MISCELLANEOUS = "miscellaneous"
+    SOFTWARE = "software"
     UNKNOWN = "unknown"
 
 # Easiest (by expensive, time consuming), would be to use Plaid API
@@ -48,7 +50,7 @@ def load_descriptions():
     categories = []
     
     try:
-        with open(os.path.join(DATA_FOLDER, "descriptions-data.json"), "r", encoding="utf-8") as f:
+        with open(os.path.join(PRIVATE_DATA_FOLDER, "descriptions-data.json"), "r", encoding="utf-8") as f:
             data = json.load(f)  # Load the entire JSON array
             logger.info(f"Loaded {len(data)} items from JSON file")
             
@@ -82,25 +84,29 @@ def load_descriptions():
     return descriptions, categories
 
 def train_classifier():
-    # Load training data first
+    """Train classifier with case-insensitive handling"""
     training_descriptions, training_categories = load_training_data()
     
     if not training_descriptions:
         logger.error("No training data available!")
         return None, None
     
-    # Create and fit the vectorizer
+    # Create vectorizer with case-insensitive processing
     vectorizer = CountVectorizer(
+        preprocessor=clean_text,  # Use our clean_text function
         stop_words=None,
         min_df=1,
         token_pattern=r'[^\s]+',
+        lowercase=True  # Make sure vectorizer handles case consistently
     )
     
     try:
-        X = vectorizer.fit_transform(training_descriptions)
+        # Clean all training descriptions
+        cleaned_descriptions = [clean_text(desc) for desc in training_descriptions]
+        
+        X = vectorizer.fit_transform(cleaned_descriptions)
         logger.info(f"Vocabulary size: {len(vectorizer.vocabulary_)}")
         
-        # Train the model
         model = MultinomialNB()
         model.fit(X, training_categories)
         
@@ -142,8 +148,10 @@ def generate_categories():
 
 def clean_text(text):
     """Clean and standardize text for better matching"""
-    # Convert to uppercase and remove special characters
-    text = re.sub(r'[^\w\s]', ' ', text.upper())
+    # Convert to uppercase for consistency
+    text = text.upper()
+    # Remove special characters but keep spaces
+    text = re.sub(r'[^\w\s]', ' ', text)
     # Remove extra whitespace
     text = ' '.join(text.split())
     return text
@@ -185,9 +193,9 @@ def get_model():
         tuple: (vectorizer, model) or (None, None) if loading fails
     """
     try:
-        with open(os.path.join(DATA_FOLDER, "model.pkl"), "rb") as f:
+        with open(os.path.join(PRIVATE_DATA_FOLDER, "model.pkl"), "rb") as f:
             model = pickle.load(f)
-        with open(os.path.join(DATA_FOLDER, "vectorizer.pkl"), "rb") as f:
+        with open(os.path.join(PRIVATE_DATA_FOLDER, "vectorizer.pkl"), "rb") as f:
             vectorizer = pickle.load(f)
         return vectorizer, model
     except FileNotFoundError:
@@ -199,12 +207,12 @@ def get_model():
 
 def predict_category(description, vectorizer, model):
     """
-    Predict category with improved matching
+    Predict category with improved case-insensitive matching
     """
     if vectorizer is None or model is None:
         return "unknown", 0.0
 
-    # Clean the input description
+    # Clean and standardize the input description
     cleaned_description = clean_text(description)
     
     # Load training data for fuzzy matching
@@ -222,10 +230,13 @@ def predict_category(description, vectorizer, model):
         best_ratio = 0
         
         for train_desc in training_descriptions:
-            # Try different fuzzy matching techniques
-            ratio1 = fuzz.ratio(cleaned_description, clean_text(train_desc))
-            ratio2 = fuzz.partial_ratio(cleaned_description, clean_text(train_desc))
-            ratio3 = fuzz.token_sort_ratio(cleaned_description, clean_text(train_desc))
+            # Clean both strings for comparison
+            clean_train = clean_text(train_desc)
+            
+            # Try different case-insensitive fuzzy matching techniques
+            ratio1 = fuzz.ratio(cleaned_description, clean_train)
+            ratio2 = fuzz.partial_ratio(cleaned_description, clean_train)
+            ratio3 = fuzz.token_sort_ratio(cleaned_description, clean_train)
             
             # Use the best matching score
             ratio = max(ratio1, ratio2, ratio3)
@@ -235,17 +246,12 @@ def predict_category(description, vectorizer, model):
                 best_match = train_desc
 
         # If we found a good fuzzy match
-        if best_ratio > 70:  # Adjusted threshold
+        if best_ratio > 70:
             X_match = vectorizer.transform([best_match])
             predicted_category = model.predict(X_match)[0]
             confidence = best_ratio / 100.0
             
             logger.debug(f"Fuzzy matched '{description}' to '{best_match}' with confidence {confidence}")
-
-    # For debugging
-    logger.debug(f"Description: {description}")
-    logger.debug(f"Cleaned: {cleaned_description}")
-    logger.debug(f"Predicted: {predicted_category} (confidence: {confidence})")
 
     return predicted_category, confidence
 
@@ -280,3 +286,4 @@ def categorize_transaction(description, vectorizer, model):
     if confidence > 0.3:
         return category
     return "unknown"
+
