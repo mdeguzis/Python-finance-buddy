@@ -37,7 +37,7 @@ def main():
     log_level = logging.DEBUG if args.debug else logging.INFO
 
     # Initialize logger
-    logger = utils.initialize_logger(log_level=log_level, log_filename=log_filename)
+    logger = utils.initialize_logger(log_level=log_level, log_filename=log_filename, scope="cli")
 
     # Check the file extension
     transaction_data = {}
@@ -65,19 +65,21 @@ def main():
         )
 
     ## Add high level info for budgeting
-    # transaction_data["budget"] = {}
-    # transaction_data["budget"]["breakdown"] = {}
+    transaction_data["budget"] = {}
+    transaction_data["budget"]["breakdown"] = {}
 
-    ## Capital one budget information
-    # transaction_data["budget"]["breakdown"]["capital_one"] = {}
-    # transaction_data["budget"]["breakdown"]["capital_one"]
-    # for user, value in transaction_data["capital_one"].items():
-    #    if value:
-    #        total_expenses = value["transactions_total_amount"]
-    #        transaction_data["budget"]["breakdown"]["capital_one"][user] = {}
-    #        transaction_data["budget"]["breakdown"]["capital_one"][user][
-    #            "expenses"
-    #        ] = total_expenses
+    # Capital one budget information
+    try:
+        transaction_data["budget"]["breakdown"]["capital_one"] = {}
+        for user, value in transaction_data["capital_one"].items():
+            if value:
+                total_expenses = value["transactions_total_amount"]
+                transaction_data["budget"]["breakdown"]["capital_one"][user] = {}
+                transaction_data["budget"]["breakdown"]["capital_one"][user][
+                "expenses"
+            ] = total_expenses
+    except TypeError as e:
+        raise Exception(f"Error processing Capital One data: {e}")
 
     # Sort main keys so "budget" key is on top
     sorted_data = {key: transaction_data[key] for key in sorted(transaction_data)}
@@ -86,6 +88,8 @@ def main():
     with open(report_filename, "w") as outfile:
         json.dump(sorted_data, outfile, indent=4, default=utils.decimal_default)
 
+    print(f"Log: {log_filename}")
+    print(f"Transactions report: {report_filename}")
 
 if __name__ == "__main__":
     main()

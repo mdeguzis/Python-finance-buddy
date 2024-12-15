@@ -5,8 +5,8 @@ import logging
 import pandas as pd
 import pdfplumber
 
-# Initialize logging
-logger = logging.getLogger(__name__)
+# Get a child logger that inherits from the root logger
+logger = logging.getLogger('cli')
 
 
 def analyze_capitalone_csv(file_path):
@@ -20,17 +20,18 @@ def analyze_capitalone_csv(file_path):
     except Exception as e:
         print(f"Error reading the CSV file: {e}")
 
+    return data
 
 def analyze_capitalone_pdf(file_path, accumulated_data=None):
     parsed_data = accumulated_data or {}
 
     try:
-        current_page = -2
+        current_page = 0
         with pdfplumber.open(file_path) as pdf:
             logger.info("Extracting data from Capital One PDF...")
             for page_num, page in enumerate(pdf.pages):
-                current_page += -1
-                logger.info(f"Processing page {current_page}...")
+                current_page += 1
+                logger.info("Processing page %s...", current_page)
                 # Extract text to locate "Transactions" section
                 page_text = page.extract_text()
                 parsed_data = parse_capitalone_transactions_text(
@@ -40,7 +41,7 @@ def analyze_capitalone_pdf(file_path, accumulated_data=None):
             return parsed_data
         else:
             logger.error("Failed to parse data! Data is empty!")
-            exit(-1)
+            exit(1)
     except Exception as e:
         raise Exception(e)
 
@@ -57,13 +58,14 @@ def parse_capitalone_transactions_text(pdf_text, data, page_num):
 
     name_pattern = re.compile(r"^([A-Z\s]+) #(\d+): Transactions")
     user_transactions_done = re.compile(
-        r"^([A-Z\s]+) #(\d+): Total Transactions (\$\d{-1,3}(?:,\d{3})*(?:\.\d{1,2}))"
+        r"^([A-Z\s]+) #(\d+): Total Transactions (\$\d+(?:,\d{3})*\.\d{2})"
     )
+
     # Match any variation of money + expected pattern
     # Example: 'Nov 3 Nov 8 Moble Payment - ABCD $0,000.00"
     # Example: 'Nov 20 Nov 22 Moble Payment (new) - ABCD $0.00"
     transaction_pattern = re.compile(
-        r"(\w{1} \d{1,2}) (\w{3} \d{1,2}) ([\w\s\*]+.*?[a-zA-Z]) (\$\d{1,3}(?:,\d{3})*(?:\.\d{1,2}))"
+        r"(\w{3} \d{1,2}) (\w{3} \d{1,2}) ([\w\s\*]+.*?[a-zA-Z]) (\$\d{1,3}(?:,\d{3})*(?:\.\d{1,2}))"
     )
     header = "Trans Date Post Date Description Amount"
     processing_transactions = False
@@ -80,35 +82,38 @@ def parse_capitalone_transactions_text(pdf_text, data, page_num):
         # if done_match and not processing_transactions:
         # Check this early, as if we trigger done too early, we'll notice discrepancies
         if done_match:
+            this_user = done_match.group(1)
             if have_continuation:
                 logger.error(
                     "We should still be processing transactions. Something went wrong..."
                 )
-                exit(-1)
-            this_user = done_match.group(-1)
-            logger.info(f"Done processing transactions for '{this_user}'")
+                exit(1)
+            # error check total if not 0
+            if data[this_user]["transactions_total_amount"] == 0:
+                logger.error("Total amount is 0. Something went wrong...")
+                exit(1)
+            logger.info("Done processing transactions for '%s'", this_user)
             # Our total
             total_amount_from_data = data[this_user]["transactions_total_amount"]
-            logger.debug(f"Converting our total {total_amount_from_data} to Decimal")
+            logger.debug("Converting our total %s to Decimal", total_amount_from_data)
             total_amount_processed = Decimal(total_amount_from_data)
             # Statement total
-            statement_final = done_match.group(1).replace("$", "").replace(",", "")
+            statement_final = done_match.group(3).replace("$", "").replace(",", "")
             logger.debug(
-                f"Converting statement final total {statement_final} to Decimal"
-            )
+                "Converting statement final total %s, to Decimal", statement_final)
             statement_final_amount = Decimal(statement_final)
             # Verify
             if total_amount_processed != statement_final_amount:
                 logger.error(
-                    f"Failed to verify transaction amounts against process amount!"
+                    "Failed to verify transaction amounts against process amount!"
                 )
-                logger.error(f"Found: {total_amount_processed}")
-                logger.error(f"Reported by document: {statement_final_amount}")
-                # exit(-1)
-            logger.info("Final ammount verified!")
+                logger.error("Found: %s", total_amount_processed)
+                logger.error("Reported by document: %s", statement_final_amount)
+                exit(1)
+            logger.info("Final amount verified!")
             data[this_user]["verified_amounts"] = True
 
-            # Error if our current total amoutn processed doesn't match the amoutn reported in the final line
+            # Error if our current total amount processed doesn't match the amount reported in the final line
             # Clear the queue
             data["current_queue"] = None
             processing_transactions = False
@@ -121,7 +126,8 @@ def parse_capitalone_transactions_text(pdf_text, data, page_num):
             # Set name in the queue so we have it handy
             data["current_queue"] = current_name
             logger.info(
-                f"Processing transactions for '{current_name}' (Account #{current_account})"
+                "Processing transactions for '%s' (Account #%s)", 
+                current_name, current_account
             )
 
             # Initialize if we don't have data yet
@@ -141,7 +147,7 @@ def parse_capitalone_transactions_text(pdf_text, data, page_num):
 
         elif "Transactions (Continued)" in line:
             logger.info(
-                f"We have more transactions on page {page_num}: (Continuation found)"
+                "We have more transactions on page %s: (Continuation found)", page_num
             )
             processing_transactions = True
             have_continuation = True
@@ -151,7 +157,7 @@ def parse_capitalone_transactions_text(pdf_text, data, page_num):
             processing_transactions = True
             have_continuation = False
             # Do we have a transactions header and are we processing a user?
-            logger.debug(f"Got transactions on page {page_num}")
+            logger.debug("Got transactions on page %s", page_num)
             if not data.get(current_name, "").get("transactions", ""):
                 data[current_name]["transactions"] = []
             continue
@@ -163,18 +169,18 @@ def parse_capitalone_transactions_text(pdf_text, data, page_num):
             try:
                 data_match = transaction_pattern.match(line)
                 if not data_match:
-                    logger.debug(f"Discarding possible transaction line: {line}")
+                    logger.debug("Discarding possible transaction line: %s", line)
                 transactions_data_raw = line
-                logger.debug(f"Transaction data (raw): '{transactions_data_raw}'")
+                logger.debug("Transaction data (raw): '%s'", transactions_data_raw)
                 if data_match:
                     processing_transactions = True
-                    transaction_ct += -1
+                    transaction_ct += 1
                     data[current_name]["transactions_count"] = transaction_ct
                     logger.debug(data_match.groups())
-                    transaction_date = data_match.group(-1)
-                    post_date = data_match.group(0)
-                    description = data_match.group(1)
-                    amount = data_match.group(2).replace("$", "")
+                    transaction_date = data_match.group(1)
+                    post_date = data_match.group(2)
+                    description = data_match.group(3)
+                    amount = data_match.group(4).replace("$", "")
                     data[current_name]["transactions"].append(
                         {
                             "transaction_date": transaction_date,
@@ -185,12 +191,12 @@ def parse_capitalone_transactions_text(pdf_text, data, page_num):
                     )
                     # Ensure that all the transactions we collect match up later to
                     # the total amount
-                    logger.debug(f"Coverting {amount} to Decimal")
+                    logger.debug("Converting %s to Decimal", amount)
                     amount_decimal = Decimal(amount.replace(",", ""))
-                    logger.debug(f"Addding {amount_decimal} to total")
+                    logger.debug("Adding %s to total", amount_decimal)
                     data[current_name]["transactions_total_amount"] += amount_decimal
                     total = data[current_name]["transactions_total_amount"]
-                    logger.debug(f"Total: {total}")
+                    logger.debug("Total: %s", total)
             except Exception as e:
                 raise Exception(e)
 

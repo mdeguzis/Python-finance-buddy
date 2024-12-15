@@ -25,7 +25,6 @@ def initialize_logger(log_level=logging.INFO, log_filename=None,
 
     # Only set if the default is not set
     if formatter == "%(asctime)s - %(levelname)s - %(message)s" and log_level == logging.DEBUG:
-        print("Formatter not set, and debug mode, using full message details")
         formatter = "[%(name)s] %(asctime)s - %(levelname)s - %(message)s"
     
     # Add the logger name tossing out messages if using debug mode
