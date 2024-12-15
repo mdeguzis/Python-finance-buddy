@@ -23,6 +23,7 @@ MODEL_PATH = os.path.join(DATA_FOLDER, 'model.pkl')
 # Define an Enum for expense categories
 class ExpenseCategory(Enum):
     RENT = "rent"
+    BILLS = "bills"
     UTILITIES = "utilities"
     GROCERIES = "groceries"
     TRANSPORTATION = "transportation"

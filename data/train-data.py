@@ -14,9 +14,10 @@ classification.save_model(vectorizer, model)
 print("Making predictions...")
 
 descriptions = [
-    "CHIPOTLE 0203HERNDONVA",
+    "CHIPOTLE USAPAVAFL",
     "PRT CRYSTAL PLACE703-9205600VA",
     "SQ *CAFE AMAZONSomethingUSA",
+    "GOOGLE *CBS Mobile"
 ]
 for description in descriptions:
     print("\nAttempting to predict category for: " + description)
