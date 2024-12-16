@@ -30,7 +30,7 @@ $ pipenv run finance-buddy --capital-one ~/Downloads/test.pdf
 2024-12-15 04:02:46,942 - INFO - Predicted food for description 'TST*FOODPLACE"
 2024-12-15 04:02:47,536 - INFO - Log: /tmp/monthly-budget.log
 2024-12-15 04:02:47,537 - INFO - Transactions report: /tmp/monthly-budget-report.json
-2024-12-15 04:02:47,537 - INFO - Descriptions written to /local/home/deguzim/src/Python-finance-buddy/private/descriptions-data.json
+2024-12-15 04:02:47,537 - INFO - Descriptions written to ~/src/Python-finance-buddy/private/descriptions-data.json
 ```
 
 Outputs:
