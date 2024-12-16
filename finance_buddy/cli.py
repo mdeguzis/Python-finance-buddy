@@ -140,11 +140,8 @@ def main():
         transaction_data["budget"]["breakdown"]["by-bank"] = {}
         transaction_data["budget"]["breakdown"]["expenses_breakdown"] = {}
         for bank in banks:
-            transaction_data["budget"]["breakdown"]["by-bank"][bank] = {}
             if transaction_data.get(bank):
-                transactions_sorted_breakdown = utils.sort_transactions_by_amount(
-                    transaction_data
-                )
+                transaction_data["budget"]["breakdown"]["by-bank"][bank] = {}
                 for user, value in transaction_data[bank].items():
                     if value:
                         total_expenses = value["transactions_total_amount"]
