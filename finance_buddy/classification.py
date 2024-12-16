@@ -218,9 +218,9 @@ def get_model():
         tuple: (vectorizer, model) or (None, None) if loading fails
     """
     try:
-        with open(os.path.join(PRIVATE_DATA_FOLDER, "model.pkl"), "rb") as f:
+        with open(os.path.join(DATA_FOLDER, "model.pkl"), "rb") as f:
             model = pickle.load(f)
-        with open(os.path.join(PRIVATE_DATA_FOLDER, "vectorizer.pkl"), "rb") as f:
+        with open(os.path.join(DATA_FOLDER, "vectorizer.pkl"), "rb") as f:
             vectorizer = pickle.load(f)
         return vectorizer, model
     except FileNotFoundError:
@@ -289,7 +289,7 @@ def save_model(
 ):
     with open(vectorizer_path, "wb") as f:
         pickle.dump(vectorizer, f)
-        print("Saved vector model to ", vectorizer_path)
+        logger.info("Saved vector model to ", vectorizer_path)
     with open(model_path, "wb") as f:
         pickle.dump(model, f)
         print("Saved model to ", model_path)
@@ -386,12 +386,3 @@ def test_predictions():
         for unknown in unknowns:
             print(unknown)
     print()
-
-
-def main():
-    # Only train and save if you have new training data
-    # Maybe make this and arg
-    train_and_save()
-
-    # Make predictions using saved model
-    test_predictions()

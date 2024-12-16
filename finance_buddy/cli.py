@@ -26,10 +26,13 @@ def process_args():
         help="Path to the Capital One statement (CSV or PDF).",
     )
     parser.add_argument(
-        "--train", action="store_true", help="Train and save the model."
+        "--train", action="store_true", help="Train and save the model.", default=False
     )
     parser.add_argument(
-        "--test", action="store_true", help="Test predictions using the model."
+        "--test",
+        action="store_true",
+        help="Test predictions using the model.",
+        default=False,
     )
     parser.add_argument(
         "--debug", "-d", action="store_true", help="Enable debug output"
@@ -44,6 +47,8 @@ def main():
     """Entry point for the application."""
     args = process_args()
     log_level = logging.DEBUG if args.debug else logging.INFO
+    transaction_data = {}
+    data = None
     locale.setlocale(locale.LC_ALL, "en_US.UTF-8")
 
     # Initialize logger
@@ -53,13 +58,11 @@ def main():
 
     if args.train:
         classification.train_and_save()
-    if args.test:
+    elif args.test:
         classification.test_predictions()
 
     # Check the file extension
-    transaction_data = {}
-    data = None
-    if args.capital_one:
+    elif args.capital_one:
         file_path = Path(args.capital_one).resolve()
         logger.info(f"Analyzing file: {file_path}")
         if file_path.suffix.lower() == ".csv":
