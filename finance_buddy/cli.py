@@ -23,6 +23,12 @@ def process_args():
     parser.add_argument(
         "--capital-one",
         "-c",
+        action="store_true",
+        help="Automatically download and analyze latest Capital One statement",
+    )
+    parser.add_argument(
+        "--capital-one-file",
+        "-cf",
         help="Path to the Capital One statement (CSV or PDF).",
     )
     parser.add_argument(
@@ -55,6 +61,16 @@ def main():
     logger = utils.initialize_logger(
         log_level=log_level, log_filename=log_filename, scope="cli"
     )
+
+    # Login to capital one and get PDF location
+    pdf_location = capital_one.login_capital_one(args)
+    if pdf_location:
+        logger.info(f"Successfully downloaded statement to: {pdf_location}")
+    else:
+        logger.error("Failed to download Capital One statement")
+        exit(1)
+    print("pause")
+    exit(0)
 
     if args.train:
         classification.train_and_save()

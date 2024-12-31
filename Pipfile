@@ -11,6 +11,8 @@ rapidfuzz = "*"
 scikit-learn = "*"
 fuzzywuzzy = "*"
 python-levenshtein = "*"
+selenium = "*"
+webdriver-manager = "*"
 
 [dev-packages]
 
