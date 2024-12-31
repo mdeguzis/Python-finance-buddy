@@ -1,5 +1,13 @@
 from decimal import Decimal
 import logging
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+import json
+from reportlab.pdfgen import canvas
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
+from reportlab.lib import colors
+import json
+
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +45,7 @@ def initialize_logger(
         formatter = "[%(name)s] %(asctime)s - %(levelname)s - %(message)s"
 
     # Add the logger name tossing out messages if using debug mode
-    # Helpel for sorting out messages and suppressing garbage
+    # Helpful for sorting out messages and suppressing garbage
     if log_level == logging.DEBUG:
         formatter = f"[%(name)s] {formatter}"
 
@@ -82,6 +90,14 @@ def initialize_logger(
         file_formatter = logging.Formatter(formatter)
         file_handler.setFormatter(file_formatter)
         logger.addHandler(file_handler)
+
+    debug_filename = log_filename.replace(".log", "-debug.log")
+    debug_fh = logging.FileHandler(debug_filename, "w", encoding=None, delay="true")
+    debug_fh.setLevel(logging.DEBUG)
+    debug_formatter = logging.Formatter(formatter)
+    debug_fh.setFormatter(debug_formatter)
+    logger.addHandler(debug_fh)
+    logger = logging.LoggerAdapter(logger, {"scope": scope})
 
     return logger
 
@@ -159,3 +175,47 @@ def sort_transactions_by_amount(transaction_data):
 
     # Sort by amount (highest to lowest)
     return sorted(expense_tuples, key=lambda x: amount_to_float(x[1]), reverse=True)
+
+
+def json_to_pdf(data, output_pdf):
+    # Convert dictionary to a JSON string
+    json_data = json.dumps(data, indent=4)
+
+    # Create a SimpleDocTemplate to build the PDF
+    pdf = SimpleDocTemplate(output_pdf, pagesize=letter)
+    elements = []
+
+    # Adding a title
+    title = "Generated PDF Report"
+    elements.append(title)
+
+    # Iterate through the data to structure it nicely
+    for section, items in data.items():
+        # Section title
+        elements.append(f"\n{section}\n{'-'*len(section)}")
+
+        if isinstance(items, dict):
+            # Format as table for nested dictionaries
+            table_data = [[k, v] for k, v in items.items()]
+            table = Table(table_data)
+            table.setStyle(
+                TableStyle(
+                    [
+                        ("BACKGROUND", (0, 0), (-1, 0), colors.gray),
+                        ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
+                        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                        ("BOTTOMPADDING", (0, 0), (-1, 0), 12),
+                        ("BACKGROUND", (0, 1), (-1, -1), colors.beige),
+                        ("GRID", (0, 0), (-1, -1), 1, colors.black),
+                    ]
+                )
+            )
+            elements.append(table)
+        else:
+            # Simple text list
+            for key, value in items.items():
+                elements.append(f"{key}: {value}")
+
+    # Build the PDF
+    pdf.build(elements)

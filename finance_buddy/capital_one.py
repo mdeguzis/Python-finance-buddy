@@ -80,13 +80,13 @@ def list_accounts(driver):
     """
     List all accounts found on the page with their names and numbers
     """
-    print("\nScanning for accounts...")
+    logger.debug("\nScanning for accounts...")
     wait = WebDriverWait(driver, 20)
     accounts_found = []
 
     try:
-        print("\nFound accounts:")
-        print("-" * 50)
+        logger.debug("\nFound accounts:")
+        logger.debug("-" * 50)
 
         # Look for card images with alt text (credit cards)
         images = driver.find_elements(By.TAG_NAME, "img")
@@ -99,9 +99,9 @@ def list_accounts(driver):
                         "./ancestor::*[contains(@class, 'primary-detail')]//div[contains(@class, 'account-number')]",
                     )
                     account_number = account_div.text.strip()
-                    print(f"Credit Card: {alt_text}")
-                    print(f"Account: {account_number}")
-                    print("-" * 50)
+                    logger.debug(f"Credit Card: {alt_text}")
+                    logger.debug(f"Account: {account_number}")
+                    logger.debug("-" * 50)
                     accounts_found.append(("Credit Card", alt_text, account_number))
                 except Exception as e:
                     continue
@@ -120,28 +120,28 @@ def list_accounts(driver):
                                 "./ancestor::*[contains(@class, 'primary-detail')]//div[contains(@class, 'account-number')]",
                             )
                             account_number = account_div.text.strip()
-                            print(f"Bank Account: {account_name}")
-                            print(f"Account: {account_number}")
-                            print("-" * 50)
+                            logger.debug(f"Bank Account: {account_name}")
+                            logger.debug(f"Account: {account_number}")
+                            logger.debug("-" * 50)
                             accounts_found.append(
                                 ("Bank Account", account_name, account_number)
                             )
                         except Exception as e:
-                            print(f"Bank Account: {account_name}")
-                            print("Account: [No number found]")
-                            print("-" * 50)
+                            logger.debug(f"Bank Account: {account_name}")
+                            logger.debug("Account: [No number found]")
+                            logger.debug("-" * 50)
                             accounts_found.append(("Bank Account", account_name, "N/A"))
             except Exception as e:
                 continue
 
         if not accounts_found:
-            print("No accounts found!")
+            logger.debug("No accounts found!")
             exit(2)
 
         return accounts_found
 
     except Exception as e:
-        print(f"Error scanning accounts: {str(e)}")
+        logger.debug(f"Error scanning accounts: {str(e)}")
         return []
 
 
@@ -150,7 +150,7 @@ def list_and_select_account(driver):
     List all accounts and let user select one
     Returns the selected account element
     """
-    print("\nScanning for accounts...")
+    logger.debug("\nScanning for accounts...")
     wait = WebDriverWait(driver, 20)
     accounts_found = []
 
@@ -208,11 +208,11 @@ def list_and_select_account(driver):
                 continue
 
         if not accounts_found:
-            print("No accounts found!")
+            logger.debug("No accounts found!")
             return None
 
         # Display accounts and get user selection
-        print("\nAvailable accounts:")
+        logger.debug("\nAvailable accounts:")
         for idx, (acc_type, acc_name, acc_num, _) in enumerate(accounts_found, 1):
             if acc_num != "N/A":
                 print(f"{idx}. {acc_type}: {acc_name} ({acc_num})")
@@ -231,12 +231,12 @@ def list_and_select_account(driver):
                 if 1 <= selection <= len(accounts_found):
                     return accounts_found[selection - 1]
                 else:
-                    print("Invalid selection. Please try again.")
+                    logger.debug("Invalid selection. Please try again.")
             except ValueError:
-                print("Please enter a valid number.")
+                logger.debug("Please enter a valid number.")
 
     except Exception as e:
-        print(f"Error scanning accounts: {str(e)}")
+        logger.debug(f"Error scanning accounts: {str(e)}")
         return None
 
 
@@ -246,7 +246,7 @@ def click_account(driver, acc_name, acc_number):
     """
     wait = WebDriverWait(driver, 20)
     try:
-        print(f"Looking for account tile for {acc_name}...")
+        logger.debug(f"Looking for account tile for {acc_name}...")
 
         # Try to find by account number first (more specific)
         account_number_clean = acc_number.replace("...", "").strip()
@@ -259,7 +259,7 @@ def click_account(driver, acc_name, acc_number):
                     By.CSS_SELECTOR, "div.primary-detail__identity__account-number"
                 )
                 if account_number_clean in number_element.text:
-                    print(f"Found matching tile for account {acc_name}")
+                    logger.debug(f"Found matching tile for account {acc_name}")
 
                     # Find and click the View Account button within this tile
                     view_button = tile.find_element(
@@ -271,25 +271,25 @@ def click_account(driver, acc_name, acc_number):
                     time.sleep(1)
                     try:
                         view_button.click()
-                        print("Clicked View Account button")
+                        logger.debug("Clicked View Account button")
                         return True
                     except:
                         driver.execute_script("arguments[0].click();", view_button)
-                        print("Clicked View Account button using JavaScript")
+                        logger.debug("Clicked View Account button using JavaScript")
                         return True
             except Exception as e:
                 continue
 
-        print(f"Could not find account tile for {acc_name}")
+        logger.debug(f"Could not find account tile for {acc_name}")
         return False
 
     except Exception as e:
-        print(f"Error clicking account: {str(e)}")
+        logger.debug(f"Error clicking account: {str(e)}")
         return False
 
 
 def login_capital_one(args):
-    print("Starting login process...")
+    logger.info("Starting login process for Capital One...")
 
     chrome_options = webdriver.ChromeOptions()
     chrome_options.add_argument("--disable-dev-shm-usage")
@@ -307,20 +307,33 @@ def login_capital_one(args):
         },
     )
 
+    # Wait up to 5 minutes to complete a login
+    timeout = 60 * 5
     driver = webdriver.Chrome(options=chrome_options)
-    wait = WebDriverWait(driver, 20)
-    print("WebDriver initialized")
+    # Initialize WebDriverWait right after creating the driver
+    wait = WebDriverWait(driver, timeout)
+    # Set page load timeout
+    driver.set_page_load_timeout(timeout)
+    logger.debug("WebDriver initialized")
 
     try:
-        print("Navigating to login page...")
+        logger.debug("Navigating to login page...")
         driver.get("https://verified.capitalone.com/auth/signin")
 
-        print("\nPlease log in manually in the browser window.")
-        print("Waiting for login completion and account page to load...")
+        logger.debug("Please log in manually in the browser window.")
+        logger.debug("Waiting for login completion and account page to load...")
 
         # Wait for URL change to indicate successful login
         wait.until(lambda driver: "accountSummary" in driver.current_url)
-        print("Login detected!")
+        logger.debug("Login detected!")
+
+        # After initial page load, minimize or move window off-screen
+        try:
+            # Minimize the window
+            driver.minimize_window()
+            logging.debug("Browser window minimized")
+        except Exception as e:
+            logging.debug(f"Could not minimize window: {str(e)}")
 
         # Wait for page to load completely
         time.sleep(5)
@@ -330,16 +343,16 @@ def login_capital_one(args):
 
         if selected_account:
             acc_type, acc_name, acc_num, _ = selected_account
-            print(f"\nSelected: {acc_type}: {acc_name}")
+            logger.debug(f"\nSelected: {acc_type}: {acc_name}")
 
             if not args.debug:
                 # Create new headless browser session
-                print("\nInitializing headless browser for automation...")
+                logger.debug("\nInitializing headless browser for automation...")
                 chrome_options.add_argument("--headless")
                 new_driver = webdriver.Chrome(options=chrome_options)
 
                 # Copy cookies from visible session to headless session
-                print("Transferring session...")
+                logger.debug("Transferring session...")
                 current_url = driver.current_url
                 new_driver.get(current_url)
 
@@ -350,7 +363,7 @@ def login_capital_one(args):
                     try:
                         new_driver.add_cookie(cookie)
                     except Exception as e:
-                        print(
+                        logger.debug(
                             f"Warning: Could not transfer cookie {cookie.get('name')}: {str(e)}"
                         )
 
@@ -358,7 +371,7 @@ def login_capital_one(args):
                 driver = new_driver
                 wait = WebDriverWait(driver, 20)
 
-                print("Navigating to account page...")
+                logger.debug("Navigating to account page...")
                 driver.refresh()
                 time.sleep(3)
 
@@ -371,22 +384,27 @@ def login_capital_one(args):
             # Download statement
             try:
                 downloaded_file = wait_for_download(os.path.expanduser("~/Downloads"))
-                print(f"Statement downloaded successfully to: {downloaded_file}")
+                if downloaded_file:
+                    logging.info(f"Successfully downloaded to: {downloaded_file}")
+                    return downloaded_file
+                else:
+                    logging.error("Download failed - no file found")
+                    return None
             except Exception as e:
-                print(f"Error waiting for download: {str(e)}")
+                logging.error(f"Error during download: {str(e)}")
+                return None
 
-            print("\nProcess completed!")
-            input("Press Enter to exit...")
         else:
-            print("No account was selected.")
+            logger.debug("No account was selected.")
 
     except Exception as e:
-        print(f"\nERROR: {str(e)}")
-        print(f"Current URL: {driver.current_url}")
+        logger.debug(f"\nERROR: {str(e)}")
+        logger.debug(f"Current URL: {driver.current_url}")
         input("Press Enter to exit...")
     finally:
-        driver.quit()
-        print("Browser closed")
+        if "driver" in locals():
+            driver.quit()
+        logging.debug("Browser closed")
 
 
 def download_statement(driver):
@@ -396,24 +414,24 @@ def download_statement(driver):
     wait = WebDriverWait(driver, 20)
     try:
         # Click "View Statements" link using the specific data-e2e attribute
-        print("Looking for View Statements link...")
+        logger.debug("Looking for View Statements link...")
         statements_link = wait.until(
             EC.element_to_be_clickable(
                 (By.CSS_SELECTOR, "[data-e2e='extensibility-bar-link-1']")
             )
         )
-        print("Clicking View Statements...")
+        logger.debug("Clicking View Statements...")
         statements_link.click()
         time.sleep(3)
 
         # Find and click the Download link using the specific class
-        print("Looking for Download link...")
+        logger.debug("Looking for Download link...")
         download_link = wait.until(
             EC.element_to_be_clickable(
                 (By.CSS_SELECTOR, "span.c1-ease-statement-viewer__menu-menuText")
             )
         )
-        print("Clicking Download...")
+        logger.debug("Clicking Download...")
 
         # Try regular click first, fallback to JavaScript click if needed
         try:
@@ -421,35 +439,48 @@ def download_statement(driver):
         except:
             driver.execute_script("arguments[0].click();", download_link)
 
-        print("Statement download initiated")
+        logger.debug("Statement download initiated")
 
         # Wait for download to complete (adjust time if needed)
         time.sleep(5)
 
     except Exception as e:
-        print(f"Error during statement download: {str(e)}")
+        logger.debug(f"Error during statement download: {str(e)}")
 
 
-def wait_for_download(download_dir, timeout=30):
+def wait_for_download(download_dir, timeout=60):
     """
     Wait for the download to complete and return the file path
     """
+    logging.debug(f"Waiting for download in directory: {download_dir}")
     start_time = time.time()
-    while time.time() - start_time < timeout:
-        # Look for PDF files in download directory
-        pdf_files = [f for f in os.listdir(download_dir) if f.endswith(".pdf")]
-        # Look specifically for files that are not temporary download files
-        complete_files = [f for f in pdf_files if not f.endswith(".crdownload")]
 
-        if complete_files:
-            # Return the most recently modified file
+    while time.time() - start_time < timeout:
+        # Check for both complete and in-progress downloads
+        files = os.listdir(download_dir)
+        pdf_files = [f for f in files if f.endswith(".pdf")]
+        crdownload_files = [f for f in files if f.endswith(".crdownload")]
+
+        # Log the current state
+        if crdownload_files:
+            logging.debug(f"Download in progress: {crdownload_files[0]}")
+
+        # If we have PDF files and no .crdownload files, download is complete
+        if pdf_files and not crdownload_files:
             newest_file = max(
-                [os.path.join(download_dir, f) for f in complete_files],
-                key=os.path.getmtime,
+                [os.path.join(download_dir, f) for f in pdf_files], key=os.path.getmtime
             )
-            return newest_file
-        time.sleep(1)
-    raise Exception("Download timeout exceeded")
+
+            # Verify file is not empty and is accessible
+            if os.path.exists(newest_file) and os.path.getsize(newest_file) > 0:
+                logging.debug(f"Download completed: {newest_file}")
+                # Add a small delay to ensure file is fully written
+                time.sleep(2)
+                return newest_file
+
+        time.sleep(1)  # Check every second
+
+    raise Exception(f"Download timeout exceeded after {timeout} seconds")
 
 
 def click_account(driver, acc_name, acc_number):
@@ -458,7 +489,7 @@ def click_account(driver, acc_name, acc_number):
     """
     wait = WebDriverWait(driver, 20)
     try:
-        print(f"Looking for account tile for {acc_name}...")
+        logger.debug(f"Looking for account tile for {acc_name}...")
 
         # Try to find by account number first (more specific)
         account_number_clean = acc_number.replace("...", "").strip()
@@ -471,7 +502,7 @@ def click_account(driver, acc_name, acc_number):
                     By.CSS_SELECTOR, "div.primary-detail__identity__account-number"
                 )
                 if account_number_clean in number_element.text:
-                    print(f"Found matching tile for account {acc_name}")
+                    logger.debug(f"Found matching tile for account {acc_name}")
 
                     # Find and click the View Account button within this tile
                     view_button = tile.find_element(
@@ -483,20 +514,20 @@ def click_account(driver, acc_name, acc_number):
                     time.sleep(1)
                     try:
                         view_button.click()
-                        print("Clicked View Account button")
+                        logger.debug("Clicked View Account button")
                         return True
                     except:
                         driver.execute_script("arguments[0].click();", view_button)
-                        print("Clicked View Account button using JavaScript")
+                        logger.debug("Clicked View Account button using JavaScript")
                         return True
             except Exception as e:
                 continue
 
-        print(f"Could not find account tile for {acc_name}")
+        logger.debug(f"Could not find account tile for {acc_name}")
         return False
 
     except Exception as e:
-        print(f"Error clicking account: {str(e)}")
+        logger.debug(f"Error clicking account: {str(e)}")
         return False
 
 
@@ -504,12 +535,12 @@ def analyze_capitalone_csv(file_path):
     try:
         # Load and analyze the CSV file
         data = pd.read_csv(file_path)
-        print("\nCapital One CSV Headers:")
-        print(data.columns.tolist())
-        print("\nFirst Row of Data:")
-        print(data.iloc[-2].to_dict())  # Display the first row for analysis
+        logger.debug("\nCapital One CSV Headers:")
+        logger.debug(data.columns.tolist())
+        logger.debug("\nFirst Row of Data:")
+        logger.debug(data.iloc[-2].to_dict())  # Display the first row for analysis
     except Exception as e:
-        print(f"Error reading the CSV file: {e}")
+        logger.debug(f"Error reading the CSV file: {e}")
 
     return data
 

@@ -14,8 +14,8 @@ from finance_buddy import utils
 from decimal import Decimal
 
 # Initialize
-report_filename = "/tmp/monthly-budget-report.json"
-log_filename = "/tmp/monthly-budget.log"
+report_filename = "/tmp/finance-buddy-report.json"
+log_filename = "/tmp/finance-buddy.log"
 
 
 def process_args():
@@ -66,11 +66,10 @@ def main():
     pdf_location = capital_one.login_capital_one(args)
     if pdf_location:
         logger.info(f"Successfully downloaded statement to: {pdf_location}")
+        args.capital_one_file = pdf_location
     else:
         logger.error("Failed to download Capital One statement")
         exit(1)
-    print("pause")
-    exit(0)
 
     if args.train:
         classification.train_and_save()
@@ -80,7 +79,7 @@ def main():
     # Check the file extension
     if not args.train and not args.test:
         if args.capital_one:
-            file_path = Path(args.capital_one).resolve()
+            file_path = Path(args.capital_one_file).resolve()
             logger.info(f"Analyzing file: {file_path}")
             if file_path.suffix.lower() == ".csv":
                 logger.info("Detected file type: CSV")
