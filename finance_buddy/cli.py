@@ -62,8 +62,13 @@ def main():
         log_level=log_level, log_filename=log_filename, scope="cli"
     )
 
+    if args.train:
+        classification.train_and_save()
+    if args.test:
+        classification.test_predictions()
+
     # Login to capital one and get PDF location
-    if not args.capital_one_file:
+    if not args.capital_one_file and not args.train and not args.test:
         pdf_location = capital_one.login_capital_one(args)
         if pdf_location:
             logger.info(f"Successfully downloaded statement to: {pdf_location}")
@@ -71,11 +76,6 @@ def main():
         else:
             logger.error("Failed to download Capital One statement")
             exit(1)
-
-    if args.train:
-        classification.train_and_save()
-    if args.test:
-        classification.test_predictions()
 
     # Check the file extension
     if not args.train and not args.test:
