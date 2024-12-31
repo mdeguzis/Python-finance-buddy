@@ -169,7 +169,7 @@ def main():
                             ] = {}
                             transaction_data["budget"]["breakdown"]["by-bank"][bank][
                                 user
-                            ]["expenses"] = locale.currency(
+                            ]["total_expenses"] = locale.currency(
                                 total_expenses, grouping=True
                             )
                             "expenses"
