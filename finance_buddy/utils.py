@@ -17,7 +17,6 @@ def initialize_logger(
     log_filename=None,
     propagate=False,
     scope=None,
-    debug_more=False,
     formatter="%(asctime)s - %(levelname)s - %(message)s",
 ):
     """
@@ -37,34 +36,17 @@ def initialize_logger(
     formatter:      Allows Adjusting log message format
     """
 
-    # Only set if the default is not set
-    if (
-        formatter == "%(asctime)s - %(levelname)s - %(message)s"
-        and log_level == logging.DEBUG
-    ):
-        formatter = "[%(name)s] %(asctime)s - %(levelname)s - %(message)s"
-
-    # Add the logger name tossing out messages if using debug mode
-    # Helpful for sorting out messages and suppressing garbage
-    if log_level == logging.DEBUG:
-        formatter = f"[%(name)s] {formatter}"
-
-    # Suppress overload of requests library debug messages
-    if not debug_more:
-        logging.getLogger("botocore").setLevel(logging.WARNING)
-        logging.getLogger("urllib3").setLevel(logging.WARNING)
-        logging.getLogger("urllib3").setLevel(logging.WARNING)
-
     # Set scope
     logger = logging.getLogger(scope)
-    logger.setLevel(log_level)
+    logger.setLevel(logging.DEBUG)  # Set to DEBUG to capture all messages
 
-    # True/False propagate logger so that routines with multiple
-    # loggers (modules, unittests), do not repeat messages
-    # https://docs.python.org/3/library/logging.html#logging.Logger.propagate
+    # Clear any existing handlers
+    logger.handlers = []
+
+    # True/False propagate logger
     logger.propagate = propagate
 
-    # create console handler and set level to info
+    # Create console handler and set level to specified log_level
     console_handler = logging.StreamHandler()
     console_handler.setLevel(log_level)
 
@@ -73,32 +55,32 @@ def initialize_logger(
     console_handler.setFormatter(console_formatter)
     logger.addHandler(console_handler)
 
-    if log_filename != None:
-        # create file handler for typical logs
+    if log_filename:
+        # Regular log file handler
         if len(log_filename) < 4 or log_filename[-4:] == ".log":
             this_log_filename = log_filename
         else:
             this_log_filename = log_filename + ".log"
 
-        # Set file_handler to target level
         file_handler = logging.FileHandler(
             this_log_filename, "w", encoding=None, delay="true"
         )
         file_handler.setLevel(log_level)
-
-        # Set formatting
         file_formatter = logging.Formatter(formatter)
         file_handler.setFormatter(file_formatter)
         logger.addHandler(file_handler)
 
-    debug_filename = log_filename.replace(".log", "-debug.log")
-    debug_fh = logging.FileHandler(debug_filename, "w", encoding=None, delay="true")
-    debug_fh.setLevel(logging.DEBUG)
-    debug_formatter = logging.Formatter(formatter)
-    debug_fh.setFormatter(debug_formatter)
-    logger.addHandler(debug_fh)
-    logger = logging.LoggerAdapter(logger, {"scope": scope})
+        # Debug log file handler
+        debug_filename = log_filename.replace(".log", "-debug.log")
+        debug_handler = logging.FileHandler(
+            debug_filename, "w", encoding=None, delay="true"
+        )
+        debug_handler.setLevel(logging.DEBUG)  # Always set to DEBUG level
+        debug_formatter = logging.Formatter(formatter)
+        debug_handler.setFormatter(debug_formatter)
+        logger.addHandler(debug_handler)
 
+    logger = logging.LoggerAdapter(logger, {"scope": scope})
     return logger
 
 

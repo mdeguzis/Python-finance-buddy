@@ -78,6 +78,8 @@ def main():
 
     # Check the file extension
     if not args.train and not args.test:
+        logging.debug("Handling Capital One")
+        exit(1)
         if args.capital_one:
             file_path = Path(args.capital_one_file).resolve()
             logger.info(f"Analyzing file: {file_path}")
