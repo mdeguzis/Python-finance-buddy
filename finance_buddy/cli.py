@@ -63,13 +63,14 @@ def main():
     )
 
     # Login to capital one and get PDF location
-    pdf_location = capital_one.login_capital_one(args)
-    if pdf_location:
-        logger.info(f"Successfully downloaded statement to: {pdf_location}")
-        args.capital_one_file = pdf_location
-    else:
-        logger.error("Failed to download Capital One statement")
-        exit(1)
+    if not args.capital_one_file:
+        pdf_location = capital_one.login_capital_one(args)
+        if pdf_location:
+            logger.info(f"Successfully downloaded statement to: {pdf_location}")
+            args.capital_one_file = pdf_location
+        else:
+            logger.error("Failed to download Capital One statement")
+            exit(1)
 
     if args.train:
         classification.train_and_save()
@@ -78,9 +79,7 @@ def main():
 
     # Check the file extension
     if not args.train and not args.test:
-        logging.debug("Handling Capital One")
-        exit(1)
-        if args.capital_one:
+        if args.capital_one_file:
             file_path = Path(args.capital_one_file).resolve()
             logger.info(f"Analyzing file: {file_path}")
             if file_path.suffix.lower() == ".csv":
@@ -186,6 +185,33 @@ def main():
                             ][user] = utils.group_transactions_by_category(
                                 user_transactions
                             )
+
+                            # Calculate and add category totals to by-bank structure
+                            for category, transactions in transaction_data["budget"][
+                                "breakdown"
+                            ]["expenses_breakdown"][user].items():
+                                category_total = Decimal("0")
+                                for transaction in transactions:
+                                    # Extract amount from transaction string
+                                    try:
+                                        amount_str = (
+                                            transaction.split("$")[1]
+                                            .split()[0]
+                                            .replace(",", "")
+                                        )
+                                        category_total += Decimal(amount_str)
+                                    except (IndexError, ValueError) as e:
+                                        logging.debug(
+                                            f"Error parsing amount from transaction: {transaction}"
+                                        )
+                                        continue
+
+                                # Add category total to by-bank structure
+                                transaction_data["budget"]["breakdown"]["by-bank"][
+                                    bank
+                                ][user][f"{category}_expense"] = locale.currency(
+                                    category_total, grouping=True
+                                )
 
             # High level non-user
             # Format budget_total_expenses as currency
