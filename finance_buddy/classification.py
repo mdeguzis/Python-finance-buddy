@@ -213,25 +213,11 @@ class TransactionClassifier:
         if not self.model or not self.vectorizer:
             self._load_model()
 
-        cleaned_description = self.clean_text(description)
+        # Keep original description for regex matching
+        original_description = description
+        training_dict = {}  # Initialize empty dictionary
 
-        # Check known patterns first
-        for pattern, category in self.known_patterns.items():
-            if re.search(pattern, cleaned_description, re.IGNORECASE):
-                logger.debug(f"Pattern match found: {pattern} -> {category}")
-                return category, 1.0
-
-        # Try regex matching
-        for pattern, category in training_dict.items():
-            try:
-                if re.search(pattern, original_description, re.IGNORECASE):
-                    logger.debug(f"Regex match found: {pattern} -> {category}")
-                    return category, 1.0
-            except re.error as e:
-                logger.debug(f"Invalid regex pattern '{pattern}': {str(e)}")
-                continue
-
-        # Load and check training data
+        # 1. Load and check training data for regex matches
         try:
             with open(self.training_data_file, "r") as f:
                 training_data = json.load(f)
@@ -250,45 +236,21 @@ class TransactionClassifier:
 
         except Exception as e:
             logger.warning(f"Could not load training data: {str(e)}")
-            training_dict = {}
+            training_dict = {}  # Ensure dictionary exists even if load fails
 
-        # Case-insensitive exact match
-        cleaned_desc_upper = cleaned_description.upper()
-        for train_desc, category in training_dict.items():
-            if cleaned_desc_upper == self.clean_text(train_desc).upper():
-                logger.debug(f"Exact match found: {train_desc} -> {category}")
-                return category, 1.0
+        # 2. Try regex matching
+        for pattern, category in training_dict.items():
+            try:
+                if re.search(pattern, original_description, re.IGNORECASE):
+                    logger.debug(f"Regex match found: {pattern} -> {category}")
+                    return category, 1.0
+            except re.error as e:
+                logger.debug(f"Invalid regex pattern '{pattern}': {str(e)}")
+                continue
 
-        # Fuzzy matching
-        best_match = None
-        best_ratio = 0
-        best_category = None
-
-        for train_desc, category in training_dict.items():
-            cleaned_train_desc = self.clean_text(train_desc)
-            # Try different fuzzy matching techniques
-            ratio1 = fuzz.ratio(cleaned_description, cleaned_train_desc)
-            ratio2 = fuzz.partial_ratio(cleaned_description, cleaned_train_desc)
-            ratio3 = fuzz.token_sort_ratio(cleaned_description, cleaned_train_desc)
-            ratio4 = fuzz.token_set_ratio(cleaned_description, cleaned_train_desc)
-
-            # Use the best matching score
-            best_score = max(ratio1, ratio2, ratio3, ratio4)
-
-            if best_score > best_ratio:
-                best_ratio = best_score
-                best_match = train_desc
-                best_category = category
-
-        # If we found a good fuzzy match (over 85%)
-        if best_ratio > 85:
-            logger.debug(
-                f"Fuzzy match found: {best_match} ({best_ratio}%) -> {best_category}"
-            )
-            return best_category, best_ratio / 100.0
-
-        # ML model prediction as fallback
+        # 3. ML model prediction as fallback
         try:
+            cleaned_description = self.clean_text(original_description)
             desc_vector = self.vectorizer.transform([cleaned_description])
             prediction = self.model.predict(desc_vector)[0]
             probabilities = self.model.predict_proba(desc_vector)[0]
