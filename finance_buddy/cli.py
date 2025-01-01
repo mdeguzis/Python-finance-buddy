@@ -35,6 +35,12 @@ def process_args():
         "--train", action="store_true", help="Train and save the model.", default=False
     )
     parser.add_argument(
+        "--retrain",
+        action="store_true",
+        help="Force retrain the model with all data.",
+        default=False,
+    )
+    parser.add_argument(
         "--test",
         action="store_true",
         help="Test predictions using the model.",
@@ -62,13 +68,30 @@ def main():
         log_level=log_level, log_filename=log_filename, scope="cli"
     )
 
-    if args.train:
-        classification.train_and_save()
-    if args.test:
-        classification.test_predictions()
+    train = False
+    if args.train or args.retrain or args.test:
+        try:
+            if args.retrain:
+                train = True
+                logger.info("Force retraining model...")
+                classification.retrain_model()
+            else:
+                train = True
+                logger.info("Training model...")
+                classification.train_and_save()
+
+            if args.test:
+                train = True
+                logger.info("Testing model...")
+                classification.test_predictions()
+
+            logger.info("Model training completed successfully")
+        except Exception as e:
+            logger.error(f"Error during model training: {str(e)}")
+            exit(1)
 
     # Login to capital one and get PDF location
-    if not args.capital_one_file and not args.train and not args.test:
+    if not args.capital_one_file and not train:
         pdf_location = capital_one.login_capital_one(args)
         if pdf_location:
             logger.info(f"Successfully downloaded statement to: {pdf_location}")
@@ -78,7 +101,7 @@ def main():
             exit(1)
 
     # Check the file extension
-    if not args.train and not args.test:
+    if not train and not args.test:
         if args.capital_one_file:
             file_path = Path(args.capital_one_file).resolve()
             logger.info(f"Analyzing file: {file_path}")

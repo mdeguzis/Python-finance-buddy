@@ -1,5 +1,5 @@
-from decimal import Decimal
 import re
+import datetime
 import locale
 import logging
 import os
@@ -12,6 +12,7 @@ if os.name == "nt":
 else:
     msvcrt = None
 
+from decimal import Decimal
 from finance_buddy import classification
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -385,8 +386,20 @@ def login_capital_one(args):
             try:
                 downloaded_file = wait_for_download(os.path.expanduser("~/Downloads"))
                 if downloaded_file:
-                    logging.info(f"Successfully downloaded to: {downloaded_file}")
-                    return downloaded_file
+                    logging.debug(f"Successfully downloaded to: {downloaded_file}")
+                    # Rename the file to include current month name and YYYY
+                    current_month = datetime.datetime.now().strftime("%B")
+                    current_year = datetime.datetime.now().strftime("%Y")
+                    new_file_name = (
+                        f"capital_one_{acc_name}_{current_month}_{current_year}.pdf"
+                    )
+                    new_file_path = os.path.join(
+                        os.path.expanduser("~/Downloads"), new_file_name
+                    )
+                    logger.debug(f"Renaming {downloaded_file} to {new_file_name}")
+                    os.rename(downloaded_file, new_file_path)
+                    logging.info(f"File saved to: {new_file_path}")
+                    return new_file_path
                 else:
                     logging.error("Download failed - no file found")
                     return None
@@ -710,13 +723,8 @@ def parse_capitalone_transactions_text(pdf_text, data, page_num):
                     post_date = data_match.group(2)
                     description = data_match.group(3)
                     # Attempt to predict category based on training model
-                    vectorizer, model = classification.get_model()
-                    category = classification.categorize_transaction(
-                        description, vectorizer, model
-                    )
-
-                    # Move to debug
-                    logger.info(
+                    category = classification.categorize_transaction(description)
+                    logger.debug(
                         "Predicted %s for description '%s'", category, description
                     )
 

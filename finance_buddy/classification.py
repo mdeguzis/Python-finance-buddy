@@ -1,29 +1,24 @@
-import logging
-import pickle
-import json
 import os
 import re
-from rapidfuzz import fuzz
+import json
+import pickle
+import logging
 from enum import Enum
-
-from fuzzywuzzy import fuzz
-from sklearn.feature_extraction.text import CountVectorizer
+from pathlib import Path
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
+from fuzzywuzzy import fuzz
 
 # Initialize logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("cli")
 
 # Constants
-# Get absolute path to project root folder (one level up from current file)
-ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
-DATA_FOLDER = os.path.join(ROOT_DIR, "data")
-PRIVATE_DATA_FOLDER = os.path.join(ROOT_DIR, "private")
-VECTORIZER_PATH = os.path.join(DATA_FOLDER, "vectorizer.pkl")
+DATA_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+PRIVATE_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), "private")
 MODEL_PATH = os.path.join(DATA_FOLDER, "model.pkl")
-LOW_CONDFIDENCE = 0.50
+VECTORIZER_PATH = os.path.join(DATA_FOLDER, "vectorizer.pkl")
 
 
-# Define an Enum for expense categories
 class ExpenseCategory(Enum):
     BILLS = "bills"
     ENTERTAINMENT = "entertainment"
@@ -44,161 +39,404 @@ class ExpenseCategory(Enum):
     UTILITIES = "utilities"
 
 
-# Easiest (by expensive, time consuming), would be to use Plaid API
-# Other options:
-#   * Merchant Category Codes (MCCs)
+class TransactionClassifier:
+    def __init__(self):
+        self.root_dir = os.path.dirname(os.path.dirname(__file__))
+        self.data_folder = DATA_FOLDER
+        self.private_folder = PRIVATE_FOLDER
+        self.model_dir = os.path.expanduser("~/.finance_buddy")
 
+        # Create necessary directories
+        for directory in [self.data_folder, self.private_folder, self.model_dir]:
+            os.makedirs(directory, exist_ok=True)
 
-# Training data will be pulled from a descriptions file
-# This file will be written on each run to continue to improve the model
-# Load the this from data/descriptions-data.txt
-def load_descriptions():
-    """
-    Load descriptions and categories from a file into lists.
-    Each line should be in JSON format: {"transaction": "text", "category": "category_name"}
-    """
-    descriptions = []
-    categories = []
+        self.model_file = MODEL_PATH
+        self.vectorizer_file = VECTORIZER_PATH
+        self.training_data_file = os.path.join(DATA_FOLDER, "training-categories.json")
 
-    try:
-        with open(
-            os.path.join(PRIVATE_DATA_FOLDER, "descriptions-data.json"),
-            "r",
-            encoding="utf-8",
-        ) as f:
-            data = json.load(f)  # Load the entire JSON array
-            logger.info(f"Loaded {len(data)} items from JSON file")
+        self.vectorizer = None
+        self.model = None
 
-            for item in data:
-                # Make sure we're getting the right field name
-                if "transaction" in item and "category" in item:
-                    # Skip empty descriptions
-                    if item["transaction"].strip():
-                        descriptions.append(item["transaction"])
-                        categories.append(item["category"])
+        self.known_patterns = {
+            r"GIANT\s*\d*": "groceries",
+            r"GONG CHA": "food",
+            r"WALMART": "shopping",
+            r"TARGET": "shopping",
+            r"UBER\s*EATS": "food",
+            r"DOORDASH": "food",
+            r"NETFLIX": "entertainment",
+            r"SPOTIFY": "entertainment",
+            r"AMAZON": "shopping",
+            r"WHOLEFDS": "groceries",
+            r"TRADER\s*JOE": "groceries",
+        }
+
+    def _load_model(self):
+        """Load the saved model and vectorizer"""
+        try:
+            if os.path.exists(self.model_file) and os.path.exists(self.vectorizer_file):
+                with open(self.model_file, "rb") as f:
+                    self.model = pickle.load(f)
+                with open(self.vectorizer_file, "rb") as f:
+                    self.vectorizer = pickle.load(f)
+            else:
+                self.train_and_save()
+        except Exception as e:
+            raise Exception(f"Error loading model: {str(e)}")
+
+    def train_and_save(self):
+        """Train a new model and save it"""
+        try:
+            # Load training data
+            training_descriptions, training_categories = self._prepare_training_data()
+
+            if not training_descriptions:
+                raise ValueError("No training data available")
+
+            # Create and train the vectorizer
+            self.vectorizer = TfidfVectorizer(
+                analyzer="word", token_pattern=r"[a-zA-Z0-9]+", stop_words="english"
+            )
+            X = self.vectorizer.fit_transform(training_descriptions)
+
+            # Create and train the model
+            self.model = MultinomialNB()
+            self.model.fit(X, training_categories)
+
+            # Save the trained model and vectorizer
+            self._save_model()
+
+            logger.info("Successfully trained and saved new model")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error training model: {str(e)}")
+            return False
+
+    def _prepare_training_data(self):
+        """Prepare training data from JSON file"""
+        training_descriptions = []
+        training_categories = []
+
+        try:
+            with open(self.training_data_file, "r") as f:
+                data = json.load(f)
+
+            if isinstance(data, dict):
+                # Dictionary format
+                for description, category in data.items():
+                    if category.lower() not in (e.value for e in ExpenseCategory):
+                        logger.warning(
+                            f"Skipping invalid category '{category}' for '{description}'"
+                        )
+                        continue
+
+                    training_descriptions.append(self.clean_text(description))
+                    training_categories.append(category.lower())
+
+                    # Add variations
+                    variations = [
+                        f"{description} #",
+                        f"{description} STORE",
+                        f"SQ *{description}",
+                        f"{description}*",
+                        f"{description} LLC",
+                        f"{description} INC",
+                    ]
+
+                    for variation in variations:
+                        training_descriptions.append(self.clean_text(variation))
+                        training_categories.append(category.lower())
+
+            elif isinstance(data, list):
+                # List format
+                for item in data:
+                    if (
+                        isinstance(item, dict)
+                        and "transaction" in item
+                        and "category" in item
+                    ):
+                        description = item["transaction"]
+                        category = item["category"]
+
+                        if category.lower() not in (e.value for e in ExpenseCategory):
+                            logger.warning(
+                                f"Skipping invalid category '{category}' for '{description}'"
+                            )
+                            continue
+
+                        training_descriptions.append(self.clean_text(description))
+                        training_categories.append(category.lower())
+
+                        # Add variations
+                        variations = [
+                            f"{description} #",
+                            f"{description} STORE",
+                            f"SQ *{description}",
+                            f"{description}*",
+                            f"{description} LLC",
+                            f"{description} INC",
+                        ]
+
+                        for variation in variations:
+                            training_descriptions.append(self.clean_text(variation))
+                            training_categories.append(category.lower())
+
+            logger.info(f"Prepared {len(training_descriptions)} training examples")
+            return training_descriptions, training_categories
+
+        except Exception as e:
+            logger.error(f"Error preparing training data: {str(e)}")
+            return [], []
+
+    def _save_model(self):
+        """Save the current model and vectorizer"""
+        try:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(self.model_file), exist_ok=True)
+            os.makedirs(os.path.dirname(self.vectorizer_file), exist_ok=True)
+
+            # Save model and vectorizer
+            with open(self.model_file, "wb") as f:
+                pickle.dump(self.model, f)
+            with open(self.vectorizer_file, "wb") as f:
+                pickle.dump(self.vectorizer, f)
+
+            logger.info("Saved model and vectorizer successfully")
+            return True
+        except Exception as e:
+            logger.error(f"Error saving model: {str(e)}")
+            return False
+
+    def predict_category(self, description, confidence_threshold=0.6):
+        """Predict category using multiple matching strategies"""
+        if not self.model or not self.vectorizer:
+            self._load_model()
+
+        cleaned_description = self.clean_text(description)
+
+        # Check known patterns first
+        for pattern, category in self.known_patterns.items():
+            if re.search(pattern, cleaned_description, re.IGNORECASE):
+                logger.debug(f"Pattern match found: {pattern} -> {category}")
+                return category, 1.0
+
+        # Try regex matching
+        for pattern, category in training_dict.items():
+            try:
+                if re.search(pattern, original_description, re.IGNORECASE):
+                    logger.debug(f"Regex match found: {pattern} -> {category}")
+                    return category, 1.0
+            except re.error as e:
+                logger.debug(f"Invalid regex pattern '{pattern}': {str(e)}")
+                continue
+
+        # Load and check training data
+        try:
+            with open(self.training_data_file, "r") as f:
+                training_data = json.load(f)
+                if isinstance(training_data, list):
+                    # Convert list format to dictionary
+                    training_dict = {
+                        item["transaction"]: item["category"]
+                        for item in training_data
+                        if isinstance(item, dict)
+                        and "transaction" in item
+                        and "category" in item
+                    }
                 else:
-                    logger.warning(f"Missing required fields in item: {item}")
+                    # Assume it's already in dictionary format
+                    training_dict = training_data
 
-    except FileNotFoundError:
-        logger.warning(
-            "descriptions-data.json not found! Make sure you run an analysis first!"
-        )
-        return [], []
-    except json.JSONDecodeError as e:
-        logger.error(f"Invalid JSON in descriptions-data.json: {str(e)}")
-        return [], []
+        except Exception as e:
+            logger.warning(f"Could not load training data: {str(e)}")
+            training_dict = {}
 
-    logger.info(f"Loaded {len(descriptions)} valid descriptions for training")
+        # Case-insensitive exact match
+        cleaned_desc_upper = cleaned_description.upper()
+        for train_desc, category in training_dict.items():
+            if cleaned_desc_upper == self.clean_text(train_desc).upper():
+                logger.debug(f"Exact match found: {train_desc} -> {category}")
+                return category, 1.0
 
-    # Debug: Print first few descriptions
-    if descriptions:
-        logger.debug("First 3 descriptions:")
-        for d in descriptions[:3]:
-            logger.debug(f"  {d}")
-    else:
-        logger.warning("No valid descriptions found!")
+        # Fuzzy matching
+        best_match = None
+        best_ratio = 0
+        best_category = None
 
-    return descriptions, categories
+        for train_desc, category in training_dict.items():
+            cleaned_train_desc = self.clean_text(train_desc)
+            # Try different fuzzy matching techniques
+            ratio1 = fuzz.ratio(cleaned_description, cleaned_train_desc)
+            ratio2 = fuzz.partial_ratio(cleaned_description, cleaned_train_desc)
+            ratio3 = fuzz.token_sort_ratio(cleaned_description, cleaned_train_desc)
+            ratio4 = fuzz.token_set_ratio(cleaned_description, cleaned_train_desc)
+
+            # Use the best matching score
+            best_score = max(ratio1, ratio2, ratio3, ratio4)
+
+            if best_score > best_ratio:
+                best_ratio = best_score
+                best_match = train_desc
+                best_category = category
+
+        # If we found a good fuzzy match (over 85%)
+        if best_ratio > 85:
+            logger.debug(
+                f"Fuzzy match found: {best_match} ({best_ratio}%) -> {best_category}"
+            )
+            return best_category, best_ratio / 100.0
+
+        # ML model prediction as fallback
+        try:
+            desc_vector = self.vectorizer.transform([cleaned_description])
+            prediction = self.model.predict(desc_vector)[0]
+            probabilities = self.model.predict_proba(desc_vector)[0]
+            confidence = max(probabilities)
+
+            logger.debug(f"ML prediction: {prediction} (confidence: {confidence:.2f})")
+
+            if confidence >= confidence_threshold:
+                return prediction, confidence
+            else:
+                return "other", confidence
+
+        except Exception as e:
+            logger.error(f"Error in ML prediction: {str(e)}")
+            return "other", 0.0
+
+    def categorize_transaction(self, description, vectorizer=None, model=None):
+        """
+        Main method to categorize a transaction description
+        """
+        category, _ = self.predict_category(description)
+        return category
+
+    def clean_text(self, text):
+        """Clean and standardize text for better matching"""
+        if not text:
+            return ""
+
+        # Convert to uppercase
+        text = text.upper()
+
+        # Remove special characters but keep spaces
+        text = re.sub(r"[^\w\s]", " ", text)
+
+        # Replace multiple spaces with single space
+        text = " ".join(text.split())
+
+        # Remove common transaction suffixes/prefixes
+        common_suffixes = [
+            r"\s+\d+$",  # Numbers at the end
+            r"\s+#\d+$",  # Store numbers
+            r"\s+LLC$",
+            r"\s+INC$",
+            r"\s+CORP$",
+            r"\s+USA$",
+            r"\s+VA$",
+            r"\s+MD$",
+            r"\s+DC$",
+        ]
+
+        for suffix in common_suffixes:
+            text = re.sub(suffix, "", text)
+
+        return text.strip()
+
+    def save_descriptions(self, descriptions_data):
+        """
+        Save transaction descriptions to JSON file,
+        only updating existing entries without adding new ones
+        """
+        try:
+            # Load existing data
+            if not os.path.exists(self.training_data_file):
+                logger.warning("Training data file does not exist")
+                return False
+
+            with open(self.training_data_file, "r") as f:
+                existing_data = json.load(f)
+
+            # Track which descriptions were updated
+            updates_made = False
+            updates_count = 0
+
+            # Only update existing entries
+            for desc in descriptions_data:
+                if (
+                    isinstance(desc, dict)
+                    and "transaction" in desc
+                    and "category" in desc
+                ):
+                    transaction = desc["transaction"]
+                    category = desc["category"]
+
+                    # Only update if the entry already exists
+                    if transaction in existing_data:
+                        if (
+                            existing_data[transaction] != category
+                            and category != "unknown"
+                        ):
+                            existing_data[transaction] = category
+                            updates_made = True
+                            updates_count += 1
+                            logger.debug(
+                                f"Updated category for '{transaction}' to '{category}'"
+                            )
+                    else:
+                        logger.debug(f"Skipping new transaction: {transaction}")
+
+            # Only save if updates were made
+            if updates_made:
+                with open(self.training_data_file, "w") as f:
+                    json.dump(existing_data, f, indent=4, sort_keys=True)
+                logger.info(
+                    f"Updated {updates_count} existing descriptions in {self.training_data_file}"
+                )
+            else:
+                logger.info("No updates needed for existing descriptions")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Error saving descriptions: {str(e)}")
+            return False
 
 
-def train_classifier():
-    """Train classifier with case-insensitive handling"""
-    training_descriptions, training_categories = load_training_data()
-
-    if not training_descriptions:
-        logger.error("No training data available!")
-        return None, None
-
-    # Create vectorizer with case-insensitive processing
-    vectorizer = CountVectorizer(
-        preprocessor=clean_text,  # Use our clean_text function
-        stop_words=None,
-        min_df=1,
-        token_pattern=r"[^\s]+",
-        lowercase=True,  # Make sure vectorizer handles case consistently
-    )
-
-    try:
-        # Clean all training descriptions
-        cleaned_descriptions = [clean_text(desc) for desc in training_descriptions]
-
-        X = vectorizer.fit_transform(cleaned_descriptions)
-        logger.info(f"Vocabulary size: {len(vectorizer.vocabulary_)}")
-
-        model = MultinomialNB()
-        model.fit(X, training_categories)
-
-        return vectorizer, model
-
-    except ValueError as e:
-        logger.error(f"Error during training: {str(e)}")
-        return None, None
+# Create global instance
+classifier = TransactionClassifier()
 
 
-def save_descriptions(descriptions_path, descriptions):
-    """
-    Save descriptions to a JSON file properly formatted
-    """
-    formatted_descriptions = []
-    for desc in descriptions:
-        # If it's already a dictionary, use it as is
-        if isinstance(desc, dict):
-            # Ensure consistent field naming
-            if "description" in desc and "transaction" not in desc:
-                desc["transaction"] = desc.pop("description")
-            formatted_descriptions.append(desc)
-        else:
-            # If it's a string, create a new dictionary
-            formatted_descriptions.append({"transaction": desc, "category": "unknown"})
-
-    try:
-        with open(descriptions_path, "w", encoding="utf-8") as f:
-            json.dump(formatted_descriptions, f, indent=4)
-    except Exception as e:
-        logger.error(f"Error saving descriptions: {str(e)}")
-
-
-# For labels, use the existing ExpenseCategory for the list of them
-# Generate a list of the enums above
+# Keep existing functions but modify them to use the classifier instance
 def generate_categories():
     return [category.value for category in ExpenseCategory]
 
 
 def clean_text(text):
-    """Clean and standardize text for better matching"""
-    # Convert to uppercase for consistency
-    text = text.upper()
-    # Remove special characters but keep spaces
-    text = re.sub(r"[^\w\s]", " ", text)
-    # Remove extra whitespace
-    text = " ".join(text.split())
-    return text
+    return classifier.clean_text(text)
 
 
 def load_training_data():
-    """Load training data with variations, ensuring categories match the ExpenseCategory enum"""
+    """Load training data with variations"""
     training_descriptions = []
     training_categories = []
 
     with open(os.path.join(DATA_FOLDER, "training-categories.json"), "r") as f:
         training_data = json.load(f)
 
-    # Validate and add variations for each merchant
     for merchant, category in training_data.items():
-        # Validate category against ExpenseCategory
         if category.lower() not in (e.value for e in ExpenseCategory):
             logger.error(f"Invalid category '{category}' for merchant '{merchant}'!")
             exit(1)
 
-        # Add original
         training_descriptions.append(merchant)
         training_categories.append(category)
 
-        # Add with common prefixes/suffixes
         variations = [
             f"{merchant} #",
             f"{merchant} STORE",
-            f"SQ *{merchant}",  # Square payments
+            f"SQ *{merchant}",
             f"{merchant}*",
             f"{merchant} LLC",
             f"{merchant} INC",
@@ -212,76 +450,10 @@ def load_training_data():
 
 
 def get_model():
-    """
-    Load the trained model and vectorizer from disk
-    Returns:
-        tuple: (vectorizer, model) or (None, None) if loading fails
-    """
-    try:
-        with open(os.path.join(DATA_FOLDER, "model.pkl"), "rb") as f:
-            model = pickle.load(f)
-        with open(os.path.join(DATA_FOLDER, "vectorizer.pkl"), "rb") as f:
-            vectorizer = pickle.load(f)
-        return vectorizer, model
-    except FileNotFoundError:
-        logger.warning("Model files not found. Please train the model first.")
-        return None, None
-    except Exception as e:
-        logger.error(f"Error loading model: {str(e)}")
-        return None, None
-
-
-def predict_category(description, vectorizer, model):
-    """
-    Predict category with improved case-insensitive matching
-    """
-    if vectorizer is None or model is None:
-        return "unknown", 0.0
-
-    # Clean and standardize the input description
-    cleaned_description = clean_text(description)
-
-    # Load training data for fuzzy matching
-    training_descriptions, _ = load_training_data()
-
-    # Try exact prediction first
-    X_new = vectorizer.transform([cleaned_description])
-    predicted_category = model.predict(X_new)[0]
-    probabilities = model.predict_proba(X_new)[0]
-    confidence = max(probabilities)
-
-    # If confidence is low, try fuzzy matching
-    if confidence < 0.3:
-        best_match = None
-        best_ratio = 0
-
-        for train_desc in training_descriptions:
-            # Clean both strings for comparison
-            clean_train = clean_text(train_desc)
-
-            # Try different case-insensitive fuzzy matching techniques
-            ratio1 = fuzz.ratio(cleaned_description, clean_train)
-            ratio2 = fuzz.partial_ratio(cleaned_description, clean_train)
-            ratio3 = fuzz.token_sort_ratio(cleaned_description, clean_train)
-
-            # Use the best matching score
-            ratio = max(ratio1, ratio2, ratio3)
-
-            if ratio > best_ratio:
-                best_ratio = ratio
-                best_match = train_desc
-
-        # If we found a good fuzzy match
-        if best_ratio > 70:
-            X_match = vectorizer.transform([best_match])
-            predicted_category = model.predict(X_match)[0]
-            confidence = best_ratio / 100.0
-
-            logger.debug(
-                f"Fuzzy matched '{description}' to '{best_match}' with confidence {confidence}"
-            )
-
-    return predicted_category, confidence
+    """Legacy function for backwards compatibility"""
+    if not classifier.model or not classifier.vectorizer:
+        classifier._load_model()
+    return classifier.vectorizer, classifier.model
 
 
 def save_model(
@@ -289,10 +461,10 @@ def save_model(
 ):
     with open(vectorizer_path, "wb") as f:
         pickle.dump(vectorizer, f)
-        logger.info("Saved vector model to ", vectorizer_path)
+        logger.info(f"Saved vector model to {vectorizer_path}")
     with open(model_path, "wb") as f:
         pickle.dump(model, f)
-        print("Saved model to ", model_path)
+        logger.info(f"Saved model to {model_path}")
 
 
 def load_model(vectorizer_path=VECTORIZER_PATH, model_path=MODEL_PATH):
@@ -303,51 +475,14 @@ def load_model(vectorizer_path=VECTORIZER_PATH, model_path=MODEL_PATH):
     return vectorizer, model
 
 
-def add_training_example(description, category):
-    """Add a new training example to training-categories.json"""
-    try:
-        with open(os.path.join(DATA_FOLDER, "training-categories.json"), "r+") as f:
-            data = json.load(f)
-            data[description] = category
-            f.seek(0)
-            json.dump(data, f, indent=4)
-            f.truncate()
-        logger.info(f"Added training example: {description} -> {category}")
-    except Exception as e:
-        logger.error(f"Error adding training example: {e}")
-
-
-def categorize_transaction(description, vectorizer, model):
-    category, confidence = predict_category(description, vectorizer, model)
-    if confidence > 0.3:
-        return category
-    return "unknown"
-
-
-def train_and_save():
-    """Train and save the model"""
-    print("Training the model...")
-    vectorizer, model = train_classifier()
-
-    if vectorizer and model:
-        print("Saving the model...")
-        save_model(vectorizer, model)
-    else:
-        logger.error("Failed to train model")
-        return
-
-
 def test_predictions():
-    """Load model and test predictions"""
-    # Load the saved model
+    """Test the model's predictions"""
     vectorizer, model = get_model()
 
     if not vectorizer or not model:
         logger.error("Could not load model. Please train first.")
         return
 
-    # Test descriptions
-    unknowns = []
     descriptions = [
         "CHIPOTLE USAPAVAFL",
         "PRT CRYSTAL 702-9205600VA",
@@ -358,31 +493,55 @@ def test_predictions():
     print("=" * 79)
     print("Making predictions on sample data...")
     print("=" * 79)
+
+    unknowns = []
     for description in descriptions:
         print(f"\nAttempting to predict category for: {description}")
-        category, confidence = predict_category(description, vectorizer, model)
-        print(f"Predicted category: {category} (confidence: {confidence:.1f})")
-        if category == "unknown" or confidence < LOW_CONDFIDENCE:
-            unknowns.append([description, f"{category}", f"{confidence:.1f}"])
-    print()
+        category = categorize_transaction(description)
+        print(f"Predicted category: {category}")
+        if category == "unknown" or category == "other":
+            unknowns.append([description, category])
 
-    print("=" * 79)
-    print("Making predictions on full data...")
-    print("=" * 79)
-    all_descriptions, categories = load_descriptions()
-    for description in all_descriptions:
-        print(f"\nAttempting to predict category for: {description}")
-        category, confidence = predict_category(description, vectorizer, model)
-        print(f"Predicted category: {category} (confidence: {confidence:.1f})")
-        if category == "unknown" or confidence < LOW_CONDFIDENCE:
-            unknowns.append([description, f"{category}", f"{confidence:.1f}"])
-    print()
-
-    # Report unknowns to fix
     if unknowns:
-        print("=" * 79)
+        print("\n" + "=" * 79)
         print("Low confidence / unknowns:")
         print("=" * 79)
         for unknown in unknowns:
             print(unknown)
-    print()
+
+
+def save_descriptions(file_path, descriptions):
+    """
+    Module-level function to save descriptions
+    Maintains compatibility with existing code
+    """
+    # Ignore file_path parameter as we're using the configured path in the classifier
+    return classifier.save_descriptions(descriptions)
+
+
+def predict_category(description):
+    """Module-level function to predict category with confidence"""
+    return classifier.predict_category(description)
+
+
+def categorize_transaction(description, vectorizer=None, model=None):
+    """
+    Module-level function that supports both old and new style calls
+    """
+    if vectorizer is not None and model is not None:
+        # Old style - use provided vectorizer and model
+        try:
+            desc_vector = vectorizer.transform([clean_text(description)])
+            prediction = model.predict(desc_vector)[0]
+            return prediction
+        except Exception as e:
+            logger.error(f"Error in old-style categorization: {str(e)}")
+            return "other"
+    else:
+        # New style - use classifier instance
+        return classifier.categorize_transaction(description)
+
+
+def train_and_save():
+    """Module-level function to train and save the model"""
+    return classifier.train_and_save()
