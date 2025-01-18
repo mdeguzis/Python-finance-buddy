@@ -1,9 +1,10 @@
-import re
 import datetime
 import locale
 import logging
 import os
+import re
 import time
+
 import pandas as pd
 import pdfplumber
 
@@ -13,12 +14,14 @@ else:
     msvcrt = None
 
 from decimal import Decimal
-from finance_buddy import classification
+from getpass import getpass
+
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from getpass import getpass
+from selenium.webdriver.support.ui import WebDriverWait
+
+from finance_buddy import classification
 
 # Get a child logger that inherits from the root logger
 logger = logging.getLogger("cli")
@@ -332,9 +335,9 @@ def login_capital_one(args):
         try:
             # Minimize the window
             driver.minimize_window()
-            logging.debug("Browser window minimized")
+            logger.debug("Browser window minimized")
         except Exception as e:
-            logging.debug(f"Could not minimize window: {str(e)}")
+            logger.debug(f"Could not minimize window: {str(e)}")
 
         # Wait for page to load completely
         time.sleep(5)
@@ -346,13 +349,13 @@ def login_capital_one(args):
             acc_type, acc_name, acc_num, _ = selected_account
             logger.debug(f"\nSelected: {acc_type}: {acc_name}")
 
-            if not args.debug:
-                # Create new headless browser session
-                logger.debug("\nInitializing headless browser for automation...")
-                chrome_options.add_argument("--headless")
-                new_driver = webdriver.Chrome(options=chrome_options)
+            # Create new headless browser session
+            logger.debug("\nInitializing headless browser for automation...")
+            chrome_options.add_argument("--headless")
+            new_driver = webdriver.Chrome(options=chrome_options)
 
-                # Copy cookies from visible session to headless session
+            # Copy cookies from visible session to headless session
+            if not args.debug:
                 logger.debug("Transferring session...")
                 current_url = driver.current_url
                 new_driver.get(current_url)
@@ -368,13 +371,13 @@ def login_capital_one(args):
                             f"Warning: Could not transfer cookie {cookie.get('name')}: {str(e)}"
                         )
 
-                driver.quit()
-                driver = new_driver
-                wait = WebDriverWait(driver, 20)
+                    driver.quit()
+                    driver = new_driver
+                    wait = WebDriverWait(driver, 20)
 
-                logger.debug("Navigating to account page...")
-                driver.refresh()
-                time.sleep(3)
+                    logger.debug("Navigating to account page...")
+                    driver.refresh()
+                    time.sleep(3)
 
             # Click on the selected account using the new method
             if not click_account(driver, acc_name, acc_num):
@@ -384,9 +387,11 @@ def login_capital_one(args):
 
             # Download statement
             try:
+                logger.debug("Attempting to download statement")
+                download_statement(driver)
                 downloaded_file = wait_for_download(os.path.expanduser("~/Downloads"))
                 if downloaded_file:
-                    logging.debug(f"Successfully downloaded to: {downloaded_file}")
+                    logger.debug(f"Successfully downloaded to: {downloaded_file}")
                     # Rename the file to include current month name and YYYY
                     current_month = datetime.datetime.now().strftime("%B")
                     current_year = datetime.datetime.now().strftime("%Y")
@@ -398,13 +403,13 @@ def login_capital_one(args):
                     )
                     logger.debug(f"Renaming {downloaded_file} to {new_file_name}")
                     os.rename(downloaded_file, new_file_path)
-                    logging.info(f"File saved to: {new_file_path}")
+                    logger.info(f"File saved to: {new_file_path}")
                     return new_file_path
                 else:
-                    logging.error("Download failed - no file found")
+                    logger.error("Download failed - no file found")
                     return None
             except Exception as e:
-                logging.error(f"Error during download: {str(e)}")
+                logger.error(f"Error during download: {str(e)}")
                 return None
 
         else:
@@ -417,13 +422,16 @@ def login_capital_one(args):
     finally:
         if "driver" in locals():
             driver.quit()
-        logging.debug("Browser closed")
+        logger.debug("Browser closed")
 
 
 def download_statement(driver):
     """
     Navigate to statements page and download the latest statement
     """
+
+    logger.debug("Navigating to statements page...")
+
     wait = WebDriverWait(driver, 20)
     try:
         # Click "View Statements" link using the specific data-e2e attribute
@@ -465,7 +473,7 @@ def wait_for_download(download_dir, timeout=60):
     """
     Wait for the download to complete and return the file path
     """
-    logging.debug(f"Waiting for download in directory: {download_dir}")
+    logger.debug(f"Waiting for download in directory: {download_dir}")
     start_time = time.time()
 
     while time.time() - start_time < timeout:
@@ -476,7 +484,7 @@ def wait_for_download(download_dir, timeout=60):
 
         # Log the current state
         if crdownload_files:
-            logging.debug(f"Download in progress: {crdownload_files[0]}")
+            logger.debug(f"Download in progress: {crdownload_files[0]}")
 
         # If we have PDF files and no .crdownload files, download is complete
         if pdf_files and not crdownload_files:
@@ -486,7 +494,7 @@ def wait_for_download(download_dir, timeout=60):
 
             # Verify file is not empty and is accessible
             if os.path.exists(newest_file) and os.path.getsize(newest_file) > 0:
-                logging.debug(f"Download completed: {newest_file}")
+                logger.debug(f"Download completed: {newest_file}")
                 # Add a small delay to ensure file is fully written
                 time.sleep(2)
                 return newest_file
@@ -494,54 +502,6 @@ def wait_for_download(download_dir, timeout=60):
         time.sleep(1)  # Check every second
 
     raise Exception(f"Download timeout exceeded after {timeout} seconds")
-
-
-def click_account(driver, acc_name, acc_number):
-    """
-    Click on the specific account tile
-    """
-    wait = WebDriverWait(driver, 20)
-    try:
-        logger.debug(f"Looking for account tile for {acc_name}...")
-
-        # Try to find by account number first (more specific)
-        account_number_clean = acc_number.replace("...", "").strip()
-        tiles = driver.find_elements(By.CSS_SELECTOR, "div.account-tile")
-
-        for tile in tiles:
-            try:
-                # Check if this tile contains our account number
-                number_element = tile.find_element(
-                    By.CSS_SELECTOR, "div.primary-detail__identity__account-number"
-                )
-                if account_number_clean in number_element.text:
-                    logger.debug(f"Found matching tile for account {acc_name}")
-
-                    # Find and click the View Account button within this tile
-                    view_button = tile.find_element(
-                        By.CSS_SELECTOR, "button[data-testid^='summary-']"
-                    )
-                    driver.execute_script(
-                        "arguments[0].scrollIntoView(true);", view_button
-                    )
-                    time.sleep(1)
-                    try:
-                        view_button.click()
-                        logger.debug("Clicked View Account button")
-                        return True
-                    except:
-                        driver.execute_script("arguments[0].click();", view_button)
-                        logger.debug("Clicked View Account button using JavaScript")
-                        return True
-            except Exception as e:
-                continue
-
-        logger.debug(f"Could not find account tile for {acc_name}")
-        return False
-
-    except Exception as e:
-        logger.debug(f"Error clicking account: {str(e)}")
-        return False
 
 
 def analyze_capitalone_csv(file_path):
