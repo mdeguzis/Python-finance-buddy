@@ -17,6 +17,10 @@ from decimal import Decimal
 from getpass import getpass
 
 from selenium import webdriver
+from selenium.common.exceptions import (
+    ElementClickInterceptedException,
+    ElementNotInteractableException,
+)
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
@@ -334,8 +338,9 @@ def login_capital_one(args):
         # After initial page load, minimize or move window off-screen
         try:
             # Minimize the window
-            driver.minimize_window()
-            logger.debug("Browser window minimized")
+            if not args.debug:
+                driver.minimize_window()
+                logger.debug("Browser window minimized")
         except Exception as e:
             logger.debug(f"Could not minimize window: {str(e)}")
 
@@ -429,7 +434,6 @@ def download_statement(driver):
     """
     Navigate to statements page and download the latest statement
     """
-
     logger.debug("Navigating to statements page...")
 
     wait = WebDriverWait(driver, 20)
@@ -445,20 +449,36 @@ def download_statement(driver):
         statements_link.click()
         time.sleep(3)
 
-        # Find and click the Download link using the specific class
+        # Look for the specific Download button - refine the selector to avoid confusion with Zoom
         logger.debug("Looking for Download link...")
         download_link = wait.until(
-            EC.element_to_be_clickable(
-                (By.CSS_SELECTOR, "span.c1-ease-statement-viewer__menu-menuText")
-            )
+            EC.element_to_be_clickable((By.XPATH, "//span[text()='Download']"))
         )
-        logger.debug("Clicking Download...")
+
+        # Debug the download link state
+        logger.debug(
+            "Download link details: %s", download_link.get_attribute("outerHTML")
+        )
+        logger.debug("Download link is displayed: %s", download_link.is_displayed())
+        logger.debug("Download link is enabled: %s", download_link.is_enabled())
+
+        if not download_link.is_displayed() or not download_link.is_enabled():
+            logger.error("Download link is not interactable.")
+            raise Exception("Download link is not interactable.")
 
         # Try regular click first, fallback to JavaScript click if needed
         try:
+            logger.debug("Clicking Download button")
             download_link.click()
-        except:
+        except ElementClickInterceptedException as e:
+            logger.error(f"Click was intercepted: {e}")
             driver.execute_script("arguments[0].click();", download_link)
+        except ElementNotInteractableException as e:
+            logger.error(f"Element not interactable: {e}")
+            driver.execute_script("arguments[0].click();", download_link)
+        except Exception as e:
+            logger.error(f"Unexpected error during click: {e}")
+            raise
 
         logger.debug("Statement download initiated")
 
@@ -466,7 +486,8 @@ def download_statement(driver):
         time.sleep(5)
 
     except Exception as e:
-        logger.debug(f"Error during statement download: {str(e)}")
+        logger.error(f"Error during statement download: {e}")
+        raise
 
 
 def wait_for_download(download_dir, timeout=60):
