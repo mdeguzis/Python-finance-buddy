@@ -1,7 +1,10 @@
 {
 	"cSpell.words": [
+		"crdownload",
+		"DOORDASH",
 		"matplotlib",
 		"numpy",
-		"pdfplumber"
+		"pdfplumber",
+		"vectorizer"
 	]
 }

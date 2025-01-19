@@ -33,57 +33,6 @@ logger = logging.getLogger("cli")
 locale.setlocale(locale.LC_ALL, "en_US.UTF-8")
 
 
-def get_password_with_asterisks():
-    """Get password with asterisk masking, works on Windows and Unix-like systems"""
-    password = []
-
-    while True:
-        # Handle Windows systems
-        if os.name == "nt":
-            char = msvcrt.getwch()
-            # Handle backspace
-            if char == "\b":
-                if password:
-                    password.pop()
-                    # Remove last asterisk
-                    sys.stdout.write("\b \b")
-            # Handle enter/return key
-            elif char == "\r":
-                sys.stdout.write("\n")
-                break
-            else:
-                password.append(char)
-                sys.stdout.write("*")
-        # Handle Unix-like systems
-        else:
-            import termios
-            import tty
-
-            fd = sys.stdin.fileno()
-            old_settings = termios.tcgetattr(fd)
-            try:
-                tty.setraw(sys.stdin.fileno())
-                char = sys.stdin.read(1)
-                # Handle backspace
-                if char == "\x7f":
-                    if password:
-                        password.pop()
-                        sys.stdout.write("\b \b")
-                # Handle enter/return key
-                elif char == "\r":
-                    sys.stdout.write("\n")
-                    break
-                else:
-                    password.append(char)
-                    sys.stdout.write("*")
-            finally:
-                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-
-        sys.stdout.flush()
-
-    return "".join(password)
-
-
 def list_accounts(driver):
     """
     List all accounts found on the page with their names and numbers
@@ -396,7 +345,7 @@ def login_capital_one(args):
                 download_statement(driver)
                 downloaded_file = wait_for_download(os.path.expanduser("~/Downloads"))
                 if downloaded_file:
-                    logger.debug(f"Successfully downloaded to: {downloaded_file}")
+                    logger.debug("Successfully downloaded to: %s", downloaded_file)
                     # Rename the file to include current month name and YYYY
                     current_month = datetime.datetime.now().strftime("%B")
                     current_year = datetime.datetime.now().strftime("%Y")
@@ -437,6 +386,8 @@ def download_statement(driver):
     logger.debug("Navigating to statements page...")
 
     wait = WebDriverWait(driver, 20)
+    download_dir = os.path.expanduser("~/Downloads")
+
     try:
         # Click "View Statements" link using the specific data-e2e attribute
         logger.debug("Looking for View Statements link...")
@@ -447,9 +398,8 @@ def download_statement(driver):
         )
         logger.debug("Clicking View Statements...")
         statements_link.click()
-        time.sleep(3)
 
-        # Look for the specific Download button - refine the selector to avoid confusion with Zoom
+        # Look for the specific Download button
         logger.debug("Looking for Download link...")
         download_link = wait.until(
             EC.element_to_be_clickable((By.XPATH, "//span[text()='Download']"))
@@ -466,35 +416,42 @@ def download_statement(driver):
             logger.error("Download link is not interactable.")
             raise Exception("Download link is not interactable.")
 
-        # Try regular click first, fallback to JavaScript click if needed
+        # Click the Download button
         try:
             logger.debug("Clicking Download button")
             download_link.click()
-        except ElementClickInterceptedException as e:
-            logger.error(f"Click was intercepted: {e}")
-            driver.execute_script("arguments[0].click();", download_link)
-        except ElementNotInteractableException as e:
-            logger.error(f"Element not interactable: {e}")
-            driver.execute_script("arguments[0].click();", download_link)
         except Exception as e:
-            logger.error(f"Unexpected error during click: {e}")
-            raise
+            raise Exception("Error during download click: %s", e)
 
         logger.debug("Statement download initiated")
 
-        # Wait for download to complete (adjust time if needed)
-        time.sleep(5)
+        # Wait for download to complete
+        downloaded_file = wait_for_download(download_dir)
+        logger.debug("Downloaded file path: %s", downloaded_file)
+
+        # Rename the file to have "CapitalOne in front
+        file_name = os.path.basename(downloaded_file)
+        target_name = os.path.join(download_dir, f"CapitalOne_{file_name}")
+
+        if os.path.exists(target_name):
+            logger.debug("Target file exists, removing: %s", target_name)
+            os.remove(target_name)
+
+        os.rename(downloaded_file, target_name)
+        logger.debug("Renamed file to: %s", target_name)
 
     except Exception as e:
-        logger.error(f"Error during statement download: {e}")
+        logger.error("Error during statement download: %s", e)
         raise
 
 
-def wait_for_download(download_dir, timeout=60):
+def wait_for_download(download_dir="~/Downloads", timeout=60):
     """
-    Wait for the download to complete and return the file path
+    Wait for the download to complete and return the file path.
+    This function will also keep the browser open until the download completes.
     """
-    logger.debug(f"Waiting for download in directory: {download_dir}")
+    download_dir = os.path.expanduser(download_dir)  # Expand the ~ to full path
+    logger.debug("Waiting for download in directory: %s", download_dir)
     start_time = time.time()
 
     while time.time() - start_time < timeout:
@@ -503,9 +460,9 @@ def wait_for_download(download_dir, timeout=60):
         pdf_files = [f for f in files if f.endswith(".pdf")]
         crdownload_files = [f for f in files if f.endswith(".crdownload")]
 
-        # Log the current state
+        # Log the current state of the download process
         if crdownload_files:
-            logger.debug(f"Download in progress: {crdownload_files[0]}")
+            logger.debug("Download in progress: %s", crdownload_files[0])
 
         # If we have PDF files and no .crdownload files, download is complete
         if pdf_files and not crdownload_files:
@@ -518,10 +475,11 @@ def wait_for_download(download_dir, timeout=60):
                 logger.debug(f"Download completed: {newest_file}")
                 # Add a small delay to ensure file is fully written
                 time.sleep(2)
-                return newest_file
+                return newest_file  # Return the file path once confirmed
 
-        time.sleep(1)  # Check every second
+        time.sleep(1)  # Check every second to allow for download progress
 
+    # If the timeout expires and no valid file is found, raise an exception
     raise Exception(f"Download timeout exceeded after {timeout} seconds")
 
 

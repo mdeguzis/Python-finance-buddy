@@ -1,13 +1,12 @@
-import os
-import re
 import json
-import pickle
 import logging
+import os
+import pickle
+import re
 from enum import Enum
-from pathlib import Path
+
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
-from fuzzywuzzy import fuzz
 
 # Initialize logging
 logger = logging.getLogger("cli")
@@ -67,7 +66,7 @@ class TransactionClassifier:
             r"NETFLIX": "entertainment",
             r"SPOTIFY": "entertainment",
             r"AMAZON": "shopping",
-            r"WHOLEFDS": "groceries",
+            r"WHOLEFOODS": "groceries",
             r"TRADER\s*JOE": "groceries",
         }
 
@@ -110,7 +109,7 @@ class TransactionClassifier:
             return True
 
         except Exception as e:
-            logger.error(f"Error training model: {str(e)}")
+            logger.error("Error training model: %s", e)
             return False
 
     def _prepare_training_data(self):
@@ -119,7 +118,7 @@ class TransactionClassifier:
         training_categories = []
 
         try:
-            with open(self.training_data_file, "r") as f:
+            with open(self.training_data_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
             if isinstance(data, dict):
@@ -127,7 +126,9 @@ class TransactionClassifier:
                 for description, category in data.items():
                     if category.lower() not in (e.value for e in ExpenseCategory):
                         logger.warning(
-                            f"Skipping invalid category '{category}' for '{description}'"
+                            "Skipping invalid category '%s' for '%s'",
+                            category,
+                            description,
                         )
                         continue
 
@@ -161,7 +162,9 @@ class TransactionClassifier:
 
                         if category.lower() not in (e.value for e in ExpenseCategory):
                             logger.warning(
-                                f"Skipping invalid category '{category}' for '{description}'"
+                                "Skipping invalid category '%s' for '%s'",
+                                category,
+                                description,
                             )
                             continue
 
@@ -182,11 +185,11 @@ class TransactionClassifier:
                             training_descriptions.append(self.clean_text(variation))
                             training_categories.append(category.lower())
 
-            logger.info(f"Prepared {len(training_descriptions)} training examples")
+            logger.info("Prepared %s training examples", len(training_descriptions))
             return training_descriptions, training_categories
 
         except Exception as e:
-            logger.error(f"Error preparing training data: {str(e)}")
+            logger.error("Error preparing training data: %s", e)
             return [], []
 
     def _save_model(self):
@@ -205,8 +208,7 @@ class TransactionClassifier:
             logger.info("Saved model and vectorizer successfully")
             return True
         except Exception as e:
-            logger.error(f"Error saving model: {str(e)}")
-            return False
+            raise Exception("Error saving model: %s", e)
 
     def predict_category(self, description, confidence_threshold=0.6):
         """Predict category using multiple matching strategies"""
@@ -219,7 +221,7 @@ class TransactionClassifier:
 
         # 1. Load and check training data for regex matches
         try:
-            with open(self.training_data_file, "r") as f:
+            with open(self.training_data_file, "r", encoding="utf-8") as f:
                 training_data = json.load(f)
                 if isinstance(training_data, list):
                     # Convert list format to dictionary
@@ -242,10 +244,10 @@ class TransactionClassifier:
         for pattern, category in training_dict.items():
             try:
                 if re.search(pattern, original_description, re.IGNORECASE):
-                    logger.debug(f"Regex match found: {pattern} -> {category}")
+                    logger.debug("Regex match found: %s -> %s", pattern, category)
                     return category, 1.0
             except re.error as e:
-                logger.debug(f"Invalid regex pattern '{pattern}': {str(e)}")
+                logger.debug("Invalid regex pattern '%s': %s", pattern, e)
                 continue
 
         # 3. ML model prediction as fallback
@@ -264,7 +266,7 @@ class TransactionClassifier:
                 return "other", confidence
 
         except Exception as e:
-            logger.error(f"Error in ML prediction: {str(e)}")
+            logger.error("Error in ML prediction: %s", e)
             return "other", 0.0
 
     def categorize_transaction(self, description, vectorizer=None, model=None):
@@ -317,7 +319,7 @@ class TransactionClassifier:
                 logger.warning("Training data file does not exist")
                 return False
 
-            with open(self.training_data_file, "r") as f:
+            with open(self.training_data_file, "r", encoding="utf-8") as f:
                 existing_data = json.load(f)
 
             # Track which descriptions were updated
@@ -344,17 +346,21 @@ class TransactionClassifier:
                             updates_made = True
                             updates_count += 1
                             logger.debug(
-                                f"Updated category for '{transaction}' to '{category}'"
+                                "Updated category for '%s' to '%s'",
+                                transaction,
+                                category,
                             )
                     else:
-                        logger.debug(f"Skipping new transaction: {transaction}")
+                        logger.debug("Skipping new transaction: %s", transaction)
 
             # Only save if updates were made
             if updates_made:
-                with open(self.training_data_file, "w") as f:
+                with open(self.training_data_file, "w", encoding="utf-8") as f:
                     json.dump(existing_data, f, indent=4, sort_keys=True)
                 logger.info(
-                    f"Updated {updates_count} existing descriptions in {self.training_data_file}"
+                    "Updated %s existing descriptions in %s",
+                    updates_count,
+                    self.training_data_file,
                 )
             else:
                 logger.info("No updates needed for existing descriptions")
@@ -362,7 +368,7 @@ class TransactionClassifier:
             return True
 
         except Exception as e:
-            logger.error(f"Error saving descriptions: {str(e)}")
+            logger.error("Error saving descriptions: %s", e)
             return False
 
 
@@ -384,13 +390,16 @@ def load_training_data():
     training_descriptions = []
     training_categories = []
 
-    with open(os.path.join(DATA_FOLDER, "training-categories.json"), "r") as f:
+    with open(
+        os.path.join(DATA_FOLDER, "training-categories.json"), "r", encoding="utf-8"
+    ) as f:
         training_data = json.load(f)
 
     for merchant, category in training_data.items():
         if category.lower() not in (e.value for e in ExpenseCategory):
-            logger.error(f"Invalid category '{category}' for merchant '{merchant}'!")
-            exit(1)
+            raise Exception(
+                "Invalid category '%s' for merchant '%s'!", category, merchant
+            )
 
         training_descriptions.append(merchant)
         training_categories.append(category)
@@ -423,10 +432,10 @@ def save_model(
 ):
     with open(vectorizer_path, "wb") as f:
         pickle.dump(vectorizer, f)
-        logger.info(f"Saved vector model to {vectorizer_path}")
+        logger.info("Saved vector model to %s", vectorizer_path)
     with open(model_path, "wb") as f:
         pickle.dump(model, f)
-        logger.info(f"Saved model to {model_path}")
+        logger.info("Saved model to %s", model_path)
 
 
 def load_model(vectorizer_path=VECTORIZER_PATH, model_path=MODEL_PATH):
@@ -472,7 +481,7 @@ def test_predictions():
             print(unknown)
 
 
-def save_descriptions(file_path, descriptions):
+def save_descriptions(descriptions):
     """
     Module-level function to save descriptions
     Maintains compatibility with existing code
@@ -497,7 +506,7 @@ def categorize_transaction(description, vectorizer=None, model=None):
             prediction = model.predict(desc_vector)[0]
             return prediction
         except Exception as e:
-            logger.error(f"Error in old-style categorization: {str(e)}")
+            logger.error("Error in old-style categorization: %s", e)
             return "other"
     else:
         # New style - use classifier instance

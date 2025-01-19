@@ -4,14 +4,11 @@ import argparse
 import json
 import locale
 import logging
-
-from pathlib import Path
-from enum import Enum
-
-from finance_buddy import capital_one
-from finance_buddy import classification
-from finance_buddy import utils
 from decimal import Decimal
+from enum import Enum
+from pathlib import Path
+
+from finance_buddy import capital_one, classification, utils
 
 # Initialize
 report_filename = "/tmp/finance-buddy-report.json"
@@ -172,7 +169,7 @@ def main():
                                 }
                             )
 
-        classification.save_descriptions(descriptions_path, descriptions)
+        classification.save_descriptions(descriptions)
 
         # Bank breakdown by user
         banks = ["capital_one", "chase"]
