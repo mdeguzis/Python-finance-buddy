@@ -390,10 +390,13 @@ def load_training_data():
     training_descriptions = []
     training_categories = []
 
-    with open(
-        os.path.join(DATA_FOLDER, "training-categories.json"), "r", encoding="utf-8"
-    ) as f:
-        training_data = json.load(f)
+    try:
+        with open(
+            os.path.join(DATA_FOLDER, "training-categories.json"), "r", encoding="utf-8"
+        ) as f:
+            training_data = json.load(f)
+    except Exception as e:
+        raise Exception("Error loading training data: %s", e)
 
     for merchant, category in training_data.items():
         if category.lower() not in (e.value for e in ExpenseCategory):

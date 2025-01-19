@@ -32,12 +32,6 @@ def process_args():
         "--train", action="store_true", help="Train and save the model.", default=False
     )
     parser.add_argument(
-        "--retrain",
-        action="store_true",
-        help="Force retrain the model with all data.",
-        default=False,
-    )
-    parser.add_argument(
         "--test",
         action="store_true",
         help="Test predictions using the model.",
@@ -66,16 +60,11 @@ def main():
     )
 
     train = False
-    if args.train or args.retrain or args.test:
+    if args.train or args.test:
         try:
-            if args.retrain:
-                train = True
-                logger.info("Force retraining model...")
-                classification.retrain_model()
-            else:
-                train = True
-                logger.info("Training model...")
-                classification.train_and_save()
+            train = True
+            logger.info("Training model...")
+            classification.train_and_save()
 
             if args.test:
                 train = True
